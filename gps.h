@@ -9,29 +9,29 @@
 
 typedef enum ubx_class_t {
     /* Navigation Results: Position, Speed, Time, Acc, Heading, DOP, SVs used */
-    NAV = 0x01, 
-    
+    NAV = 0x01,
+
     /* Receiver Manager Messages: Satellite Status, RTC Status */
     RXM = 0x02,
-    
+
     /* Information Messages: Printf-Style Messages, with IDs such as Error, Warning, Notice */
     INF = 0x04,
-    
+
     /* Ack/Nack Messages: as replies to CFG Input Messages */
     ACK = 0x05,
-    
+
     /* Configuration Input Messages: Set Dynamic Model, Set DOP Mask, Set Baud Rate, etc. */
     CFG = 0x06,
-    
+
     /* Monitoring Messages: Comunication Status, CPU Load, Stack Usage, Task Status */
     MON = 0x0A,
-    
+
     /* AssistNow Aiding Messages: Ephemeris, Almanac, other A-GPS data input */
     AID = 0x0B,
-    
+
     /* Timing Messages: Timepulse Output, Timemark Results */
     TIM = 0x0D,
-    
+
     /* External Sensor Fusion Messages: External sensor measurements and status information */
     ESF = 0x10
 } ubx_class_t;
@@ -73,25 +73,33 @@ typedef struct ubx_packet_t {
     ubx_class_t msg_class;
     ubx_id_t msg_id;
     uint16_t msg_length;
-    
+
     char * payload;
-    
+
     uint16_t checksum;
 } ubx_packet_t;
 
+
+
 class UBX_GPS {
 public:
-    UBX_GPS(int rx, int tx);
+    UBX_GPS(PinName _rx, PinName _tx) : gpsSerial(_tx, _rx) {}
     ~UBX_GPS();
-    
+
     void poll(ubx_class_t msg_class, ubx_id_t msg_id, ubx_packet_t * dest);
 
 private:
-    Serial gpsSerial;
+	Serial gpsSerial;
+
+	inline void read(int & len, void* data, Serial &src)
+	{
+		while(len-->0)
+			(*((char*)data++)) = src.getc();
+	}
 
     uint16_t calculate_checksum(ubx_packet_t * packet);
     void debug_print(Serial &out, ubx_packet_t * packet);
     void waitForSync();
-}
+};
 
 #endif // __gps_h_

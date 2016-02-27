@@ -40,7 +40,10 @@ int main() {
 		wait_ms(5000);
 		usbSerial.printf("Satellites: %d\r\n", NMEA::getSatellites());
 		usbSerial.printf("Longitude:  %0.5f\r\n", NMEA::getLongitude());
-		usbSerial.printf("Latitude:   %0.5f\r\n", NMEA::getLongitude());
+		usbSerial.printf("Latitude:   %0.5f\r\n", NMEA::getLatitude());
+		usbSerial.printf("Altitude:   %0.2fm\r\n", NMEA::getAltitude());
+		usbSerial.printf("Speed:      %0.2fkts\r\n", NMEA::getSpeed());
+		usbSerial.printf("Bearing:    %0.2f degrees\r\n", NMEA::getBearing());
 
     }
 }

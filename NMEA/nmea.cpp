@@ -39,7 +39,7 @@ extern Serial usbSerial;
 
 bool			NMEA::m_bFlagRead;						// flag used by the parser, when a valid sentence has begun
 bool			NMEA::m_bFlagDataReady;					// valid GPS fix and data available, user can call reader functions
-char			NMEA::tmp_words[20][15];				//	hold parsed words for one given NMEA sentence
+char			NMEA::tmp_words[50][80];				//	hold parsed words for one given NMEA sentence
 char			NMEA::tmp_szChecksum[15];				//	hold the received checksum for one given NMEA sentence
 
 // will be set to true for characters between $ and * only
@@ -59,7 +59,7 @@ float			NMEA::res_fLatitude;					// GPRMC and GPGGA
 unsigned char	NMEA::res_nUTCHour;
 unsigned char 	NMEA::res_nUTCMin;
 unsigned char 	NMEA::res_nUTCSec;
-unsigned char	NMEA::res_nUTCDay	;
+unsigned char	NMEA::res_nUTCDay;
 unsigned char 	NMEA::res_nUTCMonth;
 unsigned char 	NMEA::res_nUTCYear;	// GPRMC
 int				NMEA::res_nSatellitesUsed;			// GPGGA
@@ -270,7 +270,7 @@ void NMEA::parsedata() {
 		//parse speed
 		// The knot (pronounced not) is a unit of speed equal to one nautical mile (1.852 km) per hour
 		res_fSpeed = string2float(tmp_words[7]);
-		res_fSpeed /= 1.852; // convert to km/h
+		res_fSpeed *= 1.852; // convert to km/h
 		// parse bearing
 		res_fBearing = string2float(tmp_words[8]);
 		// parse UTC date

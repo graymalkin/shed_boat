@@ -2,6 +2,7 @@
 #include <math.h>
 #include <pb_encode.h>
 #include "nmea.h"
+#include "NavHelper.h"
 #include "PID.h"
 #include "SimonK_I2C_ESC.h"
 
@@ -15,19 +16,10 @@
 #define DECLINATION_ANGLE ((-16.0*M_PI)/(60.0*180.0))
 #include "HMC5883L.h"
 
-#ifndef M_PI
-    #define M_PI 3.14159265358979323846
-#endif
-
-#define TWO_PI (M_PI+M_PI)
-#define EARTH_RADIUS_METERS 6371000
-
 Serial usbSerial(USBTX, USBRX);
 I2C i2c(D14, D15);
-Serial pc(USBTX, USBRX);
 DigitalOut heartbeat(LED_GREEN);
 HMC5883L compass(i2c);
-
 SimonK_I2C_ESC motor_1(i2c, ESC_ADDRESS,6);
 PID motor_1_pid(0.5, 1, 0, RATE);
 
@@ -35,10 +27,6 @@ PID motor_1_pid(0.5, 1, 0, RATE);
 shedBoat_Telemetry telemetry_message = shedBoat_Telemetry_init_zero;
 
 void beat();
-double degToRad(double deg);
-double heading_delta(double a, double b);
-double equirectangular(double lat1, double lon1, double lat2, double lon2);
-double startBearing(double lat1, double lon1, double lat2, double lon2);
 void send_telemetry();
 
 int main() {
@@ -86,10 +74,11 @@ int main() {
 
         if(motor_1.isAlive()){
             motor_1_pid.setProcessValue(motor_1.rpm());
-            pc.printf("%d",motor_1.rpm());pc.printf(" Actual RPM\t\t");
+            usbSerial.printf("%d",motor_1.rpm());
+            usbSerial.printf(" Actual RPM\t\t");
             float rpm_compensation = motor_1_pid.compute();
-            pc.printf("%f",rpm_compensation);pc.printf("Rpm Compensation\t\t");
-            pc.printf("\n\r");
+            usbSerial.printf("%f",rpm_compensation);
+            usbSerial.printf("Rpm Compensation\t\t\r\n");
             motor_1.set((short)rpm_compensation);
         }
         send_telemetry();
@@ -122,35 +111,6 @@ int main() {
     }
 }
 
-double degToRad(double deg) {
-    return deg*M_PI/180.0;
-}
-
-/* Calculates the distance between two points */
-double equirectangular(double lat1, double lon1, double lat2, double lon2) {
-    double x = (lon2-lon1)*cos((lat1+lat2)*0.5);
-    double y = (lat2-lat1);
-
-    return sqrt(x*x + y*y) * EARTH_RADIUS_METERS;
-}
-
-/* Calculates the bearing to travel to a point given a location */
-double startBearing(double lat1, double lon1, double lat2, double lon2) {
-    double y = sin(lon2-lon1)*cos(lat2);
-    double x = cos(lat1)*sin(lat2) - sin(lat1)*cos(lat2)*cos(lon2-lon1);
-    double b = atan2(y,x);
-    return b<0.0 ? (b+TWO_PI) : b;
-}
-
-
-double heading_delta(double a, double b)
-{
-	double raw_d = a - b;
-	if(raw_d>180.0) return 360.0-raw_d;
-	if(raw_d<-180.0) return raw_d+360.0;
-	return raw_d;
-}
-
 void beat()
 {
     heartbeat = !heartbeat;
@@ -158,9 +118,9 @@ void beat()
 
 void send_telemetry()
 {
-    telemetry_message.location.latitude = 51.280233;
-    telemetry_message.location.longitude = 1.078909;
-    telemetry_message.location.number_of_satellites_visible = 4;
+    telemetry_message.location.latitude = NMEA::getLatitude();
+    telemetry_message.location.longitude = NMEA::getLongitude();
+    telemetry_message.location.number_of_satellites_visible = NMEA::getSatellites();
     telemetry_message.status = shedBoat_Telemetry_Status_UNDEFINED;
     telemetry_message.motor[0].motor_number = 1;
     telemetry_message.motor[0].rpm = motor_1.rpm();

@@ -1,6 +1,14 @@
 #include "mbed.h"
-#include "nmea.h"
 #include <math.h>
+#include <pb_encode.h>
+#include "nmea.h"
+#include "PID.h"
+#include "SimonK_I2C_ESC.h"
+
+#include "boat.pb.h"
+
+#define ESC_ADDRESS 0x2B
+#define RATE 0.1
 
 // Test for correctness when in a room that does produce it's own magnetic field...
 // Magnetic Declination for Canterbury = WEST 0deg 16min
@@ -15,20 +23,40 @@
 #define EARTH_RADIUS_METERS 6371000
 
 Serial usbSerial(USBTX, USBRX);
+I2C i2c(D14, D15);
+Serial pc(USBTX, USBRX);
 DigitalOut heartbeat(LED_GREEN);
-HMC5883L compass(I2C_SDA, I2C_SCL);
+HMC5883L compass(i2c);
+
+SimonK_I2C_ESC motor_1(i2c, ESC_ADDRESS,6);
+PID motor_1_pid(0.5, 1, 0, RATE);
+
+// We are using the nanopb version of protocol buffers.
+shedBoat_Telemetry telemetry_message = shedBoat_Telemetry_init_zero;
 
 void beat();
 double degToRad(double deg);
 double heading_delta(double a, double b);
 double equirectangular(double lat1, double lon1, double lat2, double lon2);
 double startBearing(double lat1, double lon1, double lat2, double lon2);
+void send_telemetry();
 
 int main() {
 	usbSerial.baud(115200);
 
     Ticker heartbeat_tkr;
     heartbeat_tkr.attach_us(&beat, 250000);
+
+    i2c.frequency (400);
+    motor_1_pid.setInputLimits(0.0,  8913.0);
+    motor_1_pid.setOutputLimits(0.0, 32767.0);
+    motor_1_pid.setMode(AUTO_MODE);
+
+    // Arm the motor
+    motor_1.set(0);
+    wait(1);
+
+    motor_1_pid.setSetPoint(3000);
 
 
 	usbSerial.printf(	"     _              _   _                 _   \r\n"
@@ -53,6 +81,19 @@ int main() {
 	while(1)
     {
 		wait_ms(500);
+
+        motor_1.update();
+
+        if(motor_1.isAlive()){
+            motor_1_pid.setProcessValue(motor_1.rpm());
+            pc.printf("%d",motor_1.rpm());pc.printf(" Actual RPM\t\t");
+            float rpm_compensation = motor_1_pid.compute();
+            pc.printf("%f",rpm_compensation);pc.printf("Rpm Compensation\t\t");
+            pc.printf("\n\r");
+            motor_1.set((short)rpm_compensation);
+        }
+        send_telemetry();
+
 
 		usbSerial.printf("Time:       %02d:%02d:%02d\r\n", NMEA::getHour(), NMEA::getMinute(), NMEA::getSecond());
 		usbSerial.printf("Satellites: %d\r\n", NMEA::getSatellites());
@@ -113,4 +154,14 @@ double heading_delta(double a, double b)
 void beat()
 {
     heartbeat = !heartbeat;
+}
+
+void send_telemetry()
+{
+    telemetry_message.location.latitude = 51.280233;
+    telemetry_message.location.longitude = 1.078909;
+    telemetry_message.location.number_of_satellites_visible = 4;
+    telemetry_message.status = shedBoat_Telemetry_Status_UNDEFINED;
+    telemetry_message.motor[0].motor_number = 1;
+    telemetry_message.motor[0].rpm = motor_1.rpm();
 }

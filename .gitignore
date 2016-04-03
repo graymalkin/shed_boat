@@ -5,3 +5,5 @@
 *.map
 *.d
 *.hex
+*.hgignore
+*.hg/

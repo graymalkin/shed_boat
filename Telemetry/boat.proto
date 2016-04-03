@@ -1,0 +1,45 @@
+package shedBoat;
+
+message Telemetry {
+
+  enum Status {
+    UNDEFINED = 0;
+    UNDERWAY_MANUAL = 1;
+    UNDERWAY_AUTOPILOT = 2;
+    STATIONARY = 3;
+    RESTRICTED_MANEUVERABILITY = 4;
+  }
+
+  required Status status = 1 [default = UNDEFINED];
+  optional Location location = 2;
+  repeated Motor motor = 3;
+  optional Battery battery = 4;
+}
+
+message Location{
+  optional float latitude = 1;
+  optional float longitude = 2;
+  optional int32 number_of_satellites_visible = 3;
+  optional int32 speed_over_ground = 4;
+  optional int32 true_heading = 5;
+  optional int32 true_bearing = 6;
+  optional int32 utc_seconds = 7;
+}
+
+message Motor {
+  required int32 motor_number = 1;
+  optional bool  is_alive = 2;
+  optional int32 rpm = 3;
+  optional int32 temperature = 4;
+  optional int32 voltage = 5;
+  optional int32 current = 6;
+}
+
+message Battery {
+  message Cell {
+    required int32 cell_number = 1;
+    optional int32 voltage = 2;
+  }
+  optional int32 percent_full = 1;
+  repeated Cell cell = 2;
+}

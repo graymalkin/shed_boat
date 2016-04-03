@@ -1,0 +1,3 @@
+# boat.options
+shedBoat.Telemetry.motor       max_count:2
+shedBoat.Battery.cell          max_count:4

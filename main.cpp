@@ -75,7 +75,7 @@ int main() {
 
 
 	speed_over_ground_pid.setSetPoint(2.5);
-  heading_pid.setSetPoint(0);
+  	heading_pid.setSetPoint(0);
 
 	usbSerial.printf(	"     _              _   _                 _   \r\n"
 						"    | |            | | | |               | |  \r\n"
@@ -90,14 +90,16 @@ int main() {
 	NMEA::init();
 	compass.init();
 
-	while(NMEA::getSatellites() < 3);
+	// Wait for a valid GPS fix
+	while(!NMEA::isDataReady());
 
-		// Parkwood: 51.298997, 1.056683
-		// Chestfield: 51.349215, 1.066184
-		// Initialise Motors (Arming Sequence) -- If a value is not sent periodicially, then the motors WILL disarm!
-		motor_1.set(0);
-		motor_2.set(0);
-		wait(1);
+	// Parkwood: 51.298997, 1.056683
+	// Chestfield: 51.349215, 1.066184
+	// Initialise Motors (Arming Sequence) -- If a value is not sent periodicially, then the motors WILL disarm!
+	motor_1.set(0);
+	motor_2.set(0);
+	wait(1);
+
 	while(1)
     {
 		wait_ms(500);
@@ -108,8 +110,8 @@ int main() {
 		float max = bearing_compensation>=0.5 ? bearing_compensation : (1-bearing_compensation);
 		motor_1_pid.setSetPoint((speed_over_ground_compensation * bearing_compensation * Rpm_Limit)/max);
 		motor_2_pid.setSetPoint((speed_over_ground_compensation * (1-bearing_compensation) * Rpm_Limit)/max);
-    updateMotors();
-    send_telemetry(bearing);
+	    updateMotors();
+	    send_telemetry(bearing);
 
 		usbSerial.printf("Time:       %02d:%02d:%02d\r\n", NMEA::getHour(), NMEA::getMinute(), NMEA::getSecond());
 		usbSerial.printf("Satellites: %d\r\n", NMEA::getSatellites());
@@ -118,7 +120,7 @@ int main() {
 		usbSerial.printf("Altitude:   %0.2fm\r\n", NMEA::getAltitude());
 		usbSerial.printf("Speed:      %0.2fkm/h\r\n", NMEA::getSpeed());
 		usbSerial.printf("Bearing:    %0.2f degrees\r\n", NMEA::getBearing());
-    usbSerial.printf("Compass Bearing: %03.0f\r\n", bearing);
+    	usbSerial.printf("Compass Bearing: %03.0f\r\n", bearing);
 		usbSerial.printf("Heading Delta to South: %03.0f\r\n", heading_delta(bearing, 180.0));
 		usbSerial.printf("Distance to Parkwood %06.2fm\r\n",
 		equirectangular(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()),
@@ -147,7 +149,7 @@ void send_telemetry(float bearing)
     telemetry_message.location.latitude = NMEA::getLatitude();
     telemetry_message.location.longitude = NMEA::getLongitude();
     telemetry_message.location.number_of_satellites_visible = NMEA::getSatellites();
-		telemetry_message.location.true_heading = bearing;
+	telemetry_message.location.true_heading = bearing;
     telemetry_message.status = shedBoat_Telemetry_Status_UNDEFINED;
     telemetry_message.motor[0].motor_number = 1;
     telemetry_message.motor[0].rpm = motor_1.rpm();
@@ -161,11 +163,11 @@ float updateSpeedOverGround()
 
 float updateHeading()
 {
-		bearing = compass.smoothedBearing();
+	bearing = compass.smoothedBearing();
     heading_pid.setProcessValue(heading_delta(
-			startHeading(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI),
-			bearing
-		));
+		startHeading(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI),
+		bearing
+	));
      // Please rename the function call to bearing.
     return heading_pid.compute(); // Need to pass this to a function aggregating bearing correction and speed.
 }

@@ -36,13 +36,15 @@ PID heading_pid(0.5, 1, 0, RATE);
 PID motor_1_pid(0.5, 1, 0, RATE);
 PID motor_2_pid(0.5, 1, 0, RATE);
 
+double bearing;
+
 // We are using the nanopb version of protocol buffers.
 shedBoat_Telemetry telemetry_message = shedBoat_Telemetry_init_zero;
 
 void beat();
 void send_telemetry(float heading);
-void updateSpeedOverGround();
-void updateHeading();
+float updateSpeedOverGround();
+float updateHeading();
 void updateMotors();
 
 int main() {
@@ -58,7 +60,7 @@ int main() {
     speed_over_ground_pid.setOutputLimits(0.0, 1.0);
     speed_over_ground_pid.setMode(AUTO_MODE);
 
-    heading_pid.setInputLimits(0,360);
+    heading_pid.setInputLimits(-180,180);
     heading_pid.setOutputLimits(0.0, 1.0);
     heading_pid.setMode(AUTO_MODE);
 
@@ -76,11 +78,7 @@ int main() {
     wait(1);
 
 	speed_over_ground_pid.setSetPoint(2.5);
-    heading_pid.setSetPoint(startBearing(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI));
-
-	// These will need removing once we have the aggregating function.
-	motor_1_pid.setSetPoint(3000);
-	motor_2_pid.setSetPoint(3000);
+  heading_pid.setSetPoint(0);
 
 	usbSerial.printf(	"     _              _   _                 _   \r\n"
 						"    | |            | | | |               | |  \r\n"
@@ -94,7 +92,6 @@ int main() {
 
 	NMEA::init();
 	compass.init();
-	double heading = 0.0;
 
 	while(NMEA::getSatellites() < 3);
 
@@ -104,10 +101,15 @@ int main() {
 	while(1)
     {
 		wait_ms(500);
-		updateHeading();
-		updateSpeedOverGround();
-        updateMotors();
-        send_telemetry(heading);
+		float bearing_compensation = updateHeading();
+		float speed_over_ground_compensation = updateSpeedOverGround();
+
+		// Calculate motor setpoints.
+		float max = bearing_compensation>=0.5 ? bearing_compensation : (1-bearing_compensation);
+		motor_1_pid.setSetPoint((speed_over_ground_compensation * bearing_compensation * Rpm_Limit)/max);
+		motor_2_pid.setSetPoint((speed_over_ground_compensation * (1-bearing_compensation) * Rpm_Limit)/max);
+    updateMotors();
+    send_telemetry(bearing);
 
 		usbSerial.printf("Time:       %02d:%02d:%02d\r\n", NMEA::getHour(), NMEA::getMinute(), NMEA::getSecond());
 		usbSerial.printf("Satellites: %d\r\n", NMEA::getSatellites());
@@ -116,9 +118,8 @@ int main() {
 		usbSerial.printf("Altitude:   %0.2fm\r\n", NMEA::getAltitude());
 		usbSerial.printf("Speed:      %0.2fkm/h\r\n", NMEA::getSpeed());
 		usbSerial.printf("Bearing:    %0.2f degrees\r\n", NMEA::getBearing());
-		heading = compass.smoothedHeading();
-        usbSerial.printf("Compass Bearing: %03.0f\r\n", heading);
-		usbSerial.printf("Heading Delta to South: %03.0f\r\n", heading_delta(heading, 180.0));
+    usbSerial.printf("Compass Bearing: %03.0f\r\n", bearing);
+		usbSerial.printf("Heading Delta to South: %03.0f\r\n", heading_delta(bearing, 180.0));
 		usbSerial.printf("Distance to Parkwood %06.2fm\r\n",
 		equirectangular(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()),
 						degToRad(51.298997), degToRad(1.056683))
@@ -126,10 +127,10 @@ int main() {
 
 
 
-		usbSerial.printf("Bearing to Parkwood %03.0f\r\n",
+		usbSerial.printf("Heading to Parkwood %03.0f\r\n",
 			heading_delta(
-				startBearing(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI),
-				compass.smoothedHeading()
+				startHeading(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI),
+				bearing
 			)
 		);
 
@@ -141,27 +142,32 @@ void beat()
     heartbeat = !heartbeat;
 }
 
-void send_telemetry(float heading)
+void send_telemetry(float bearing)
 {
     telemetry_message.location.latitude = NMEA::getLatitude();
     telemetry_message.location.longitude = NMEA::getLongitude();
     telemetry_message.location.number_of_satellites_visible = NMEA::getSatellites();
-	telemetry_message.location.true_heading = heading;
+		telemetry_message.location.true_heading = bearing;
     telemetry_message.status = shedBoat_Telemetry_Status_UNDEFINED;
     telemetry_message.motor[0].motor_number = 1;
     telemetry_message.motor[0].rpm = motor_1.rpm();
 }
 
-void updateSpeedOverGround()
+float updateSpeedOverGround()
 {
     speed_over_ground_pid.setProcessValue(NMEA::getSpeed());
-    float speed_over_ground_compensation = speed_over_ground_pid.compute(); // Need to pass this to a function aggregating bearing correction and speed.
+    return speed_over_ground_pid.compute(); // Need to pass this to a function aggregating bearing correction and speed.
 }
 
-void updateHeading()
+float updateHeading()
 {
-    heading_pid.setProcessValue(compass.smoothedHeading());     // Please rename the function call to bearing.
-    float direction_compensation = heading_pid.compute(); // Need to pass this to a function aggregating bearing correction and speed.
+		bearing = compass.smoothedBearing();
+    heading_pid.setProcessValue(heading_delta(
+			startHeading(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI),
+			bearing
+		));
+     // Please rename the function call to bearing.
+    return heading_pid.compute(); // Need to pass this to a function aggregating bearing correction and speed.
 }
 
 void updateMotors()

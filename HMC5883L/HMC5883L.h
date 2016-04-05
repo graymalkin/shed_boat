@@ -250,7 +250,7 @@ public:
         return (getHeadingXY() * RAD_TO_DEG);
     }
 
-    double smoothedHeading();
+    double smoothedBearing();
 
 private:
 

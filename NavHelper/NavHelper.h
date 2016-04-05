@@ -11,6 +11,6 @@
 double degToRad(double deg);
 double heading_delta(double a, double b);
 double equirectangular(double lat1, double lon1, double lat2, double lon2);
-double startBearing(double lat1, double lon1, double lat2, double lon2);
+double startHeading(double lat1, double lon1, double lat2, double lon2);
 
-#endif // __nav_helper_ 
+#endif // __nav_helper_

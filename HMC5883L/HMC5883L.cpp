@@ -149,7 +149,7 @@ double HMC5883L::getHeadingXY()
     return heading;
 }
 
-double HMC5883L::smoothedHeading() {
+double HMC5883L::smoothedBearing() {
     static int historic = getHeadingXYDeg();
 
     double h = getHeadingXYDeg();

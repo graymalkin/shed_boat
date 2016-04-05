@@ -72,10 +72,7 @@ int main() {
     motor_2_pid.setOutputLimits(0.0, Throttle_Limit);
     motor_2_pid.setMode(AUTO_MODE);
 
-	// Initialise Motors (Arming Sequence) -- If a value is not sent periodicially, then the motors WILL disarm!
-    motor_1.set(0);
-	motor_2.set(0);
-    wait(1);
+
 
 	speed_over_ground_pid.setSetPoint(2.5);
   heading_pid.setSetPoint(0);
@@ -95,9 +92,12 @@ int main() {
 
 	while(NMEA::getSatellites() < 3);
 
-	// Parkwood: 51.298997, 1.056683
-	// Chestfield: 51.349215, 1.066184
-
+		// Parkwood: 51.298997, 1.056683
+		// Chestfield: 51.349215, 1.066184
+		// Initialise Motors (Arming Sequence) -- If a value is not sent periodicially, then the motors WILL disarm!
+		motor_1.set(0);
+		motor_2.set(0);
+		wait(1);
 	while(1)
     {
 		wait_ms(500);

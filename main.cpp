@@ -172,7 +172,7 @@ void send_telemetry()
 			uint8_t buffer[128];
 	    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
 			pb_encode(&stream, shedBoat_Telemetry_fields, &telemetry_message);
-			for (uint8_t i = 0; i < sizeof(buffer); i++) {
+			for (size_t i = 0; i <	stream.bytes_written; i++) {
 				serial_output.putc(buffer[i]);
 			}
 		}

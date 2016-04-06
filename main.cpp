@@ -8,6 +8,8 @@
 
 #include "boat.pb.h"
 
+// 0 = no serial debug, 1 = Verbose output (human readable), 2 = Protocol buffer output
+#define DEBUG_OUTPUT 1
 #define ESC_ADDRESS_0 0x2B
 #define ESC_ADDRESS_1 0x2A
 #define RATE 0.1
@@ -22,7 +24,7 @@
 #define DECLINATION_ANGLE ((-16.0*M_PI)/(60.0*180.0))
 #include "HMC5883L.h"
 
-Serial usbSerial(USBTX, USBRX);
+Serial serial_output(USBTX, USBRX);
 I2C i2c(D14, D15);
 DigitalOut heartbeat(LED_GREEN);
 HMC5883L compass(i2c);
@@ -37,18 +39,18 @@ PID motor_1_pid(0.5, 1, 0, RATE);
 PID motor_2_pid(0.5, 1, 0, RATE);
 
 double bearing;
-
+float heading;
 // We are using the nanopb version of protocol buffers.
 shedBoat_Telemetry telemetry_message = shedBoat_Telemetry_init_zero;
 
 void beat();
-void send_telemetry(float heading);
+void etry();
 float updateSpeedOverGround();
 float updateHeading();
 void updateMotors();
 
 int main() {
-	usbSerial.baud(115200);
+	serial_output.baud(115200);
 
     Ticker heartbeat_tkr;
     heartbeat_tkr.attach_us(&beat, 250000);
@@ -76,17 +78,17 @@ int main() {
 
 	speed_over_ground_pid.setSetPoint(2.5);
   	heading_pid.setSetPoint(0);
-
-	usbSerial.printf(	"     _              _   _                 _   \r\n"
-						"    | |            | | | |               | |  \r\n"
-						" ___| |__   ___  __| | | |__   ___   __ _| |_ \r\n"
-						"/ __| '_ \\ / _ \\/ _` | | '_ \\ / _ \\ / _` | __|\r\n"
-						"\\__ \\ | | |  __/ (_| | | |_) | (_) | (_| | |_ \r\n"
-						"|___/_| |_|\\___|\\__,_| |_.__/ \\___/ \\__,_|\\__|\r\n"
-						"                   ______                     \r\n"
-						"                  |______|\r\n"
-						"\r\n\n");
-
+	if(DEBUG_OUTPUT == 1){
+		serial_output.printf(	"     _              _   _                 _   \r\n"
+							"    | |            | | | |               | |  \r\n"
+							" ___| |__   ___  __| | | |__   ___   __ _| |_ \r\n"
+							"/ __| '_ \\ / _ \\/ _` | | '_ \\ / _ \\ / _` | __|\r\n"
+							"\\__ \\ | | |  __/ (_| | | |_) | (_) | (_| | |_ \r\n"
+							"|___/_| |_|\\___|\\__,_| |_.__/ \\___/ \\__,_|\\__|\r\n"
+							"                   ______                     \r\n"
+							"                  |______|\r\n"
+							"\r\n\n");
+	}
 	NMEA::init();
 	compass.init();
 
@@ -110,32 +112,31 @@ int main() {
 		float max = bearing_compensation>=0.5 ? bearing_compensation : (1-bearing_compensation);
 		motor_1_pid.setSetPoint((speed_over_ground_compensation * bearing_compensation * Rpm_Limit)/max);
 		motor_2_pid.setSetPoint((speed_over_ground_compensation * (1-bearing_compensation) * Rpm_Limit)/max);
-	    updateMotors();
-	    send_telemetry(bearing);
+	  updateMotors();
 
-		usbSerial.printf("Time:       %02d:%02d:%02d\r\n", NMEA::getHour(), NMEA::getMinute(), NMEA::getSecond());
-		usbSerial.printf("Satellites: %d\r\n", NMEA::getSatellites());
-		usbSerial.printf("Latitude:   %0.5f\r\n", NMEA::getLatitude());
-		usbSerial.printf("Longitude:  %0.5f\r\n", NMEA::getLongitude());
-		usbSerial.printf("Altitude:   %0.2fm\r\n", NMEA::getAltitude());
-		usbSerial.printf("Speed:      %0.2fkm/h\r\n", NMEA::getSpeed());
-		usbSerial.printf("Bearing:    %0.2f degrees\r\n", NMEA::getBearing());
-    	usbSerial.printf("Compass Bearing: %03.0f\r\n", bearing);
-		usbSerial.printf("Heading Delta to South: %03.0f\r\n", heading_delta(bearing, 180.0));
-		usbSerial.printf("Distance to Parkwood %06.2fm\r\n",
-		equirectangular(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()),
-						degToRad(51.298997), degToRad(1.056683))
-		);
+	  etry();
+		if(DEBUG_OUTPUT == 1){
+			serial_output.printf("Time:       %02d:%02d:%02d\r\n", NMEA::getHour(), NMEA::getMinute(), NMEA::getSecond());
+			serial_output.printf("Satellites: %d\r\n", NMEA::getSatellites());
+			serial_output.printf("Latitude:   %0.5f\r\n", NMEA::getLatitude());
+			serial_output.printf("Longitude:  %0.5f\r\n", NMEA::getLongitude());
+			serial_output.printf("Altitude:   %0.2fm\r\n", NMEA::getAltitude());
+			serial_output.printf("Speed:      %0.2fkm/h\r\n", NMEA::getSpeed());
+			serial_output.printf("GPS Bearing (Track made good):    %0.2f degrees\r\n", NMEA::getBearing());
+	    serial_output.printf("Compass Bearing: %03.0f\r\n", bearing);
+			serial_output.printf("Heading Delta to South: %03.0f\r\n", heading_delta(bearing, 180.0));
+			serial_output.printf("Distance to Parkwood %06.2fm\r\n",
+			equirectangular(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()),
+							degToRad(51.298997), degToRad(1.056683))
+			);
 
-
-
-		usbSerial.printf("Heading to Parkwood %03.0f\r\n",
-			heading_delta(
-				startHeading(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI),
-				bearing
-			)
-		);
-
+			serial_output.printf("Heading to Parkwood %03.0f\r\n",
+				heading_delta(
+					startHeading(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI),
+					bearing
+				)
+			);
+		}
     }
 }
 
@@ -144,32 +145,54 @@ void beat()
     heartbeat = !heartbeat;
 }
 
-void send_telemetry(float bearing)
+void etry()
 {
+		telemetry_message.status = shedBoat_Telemetry_Status_UNDEFINED;
+
     telemetry_message.location.latitude = NMEA::getLatitude();
     telemetry_message.location.longitude = NMEA::getLongitude();
     telemetry_message.location.number_of_satellites_visible = NMEA::getSatellites();
-	telemetry_message.location.true_heading = bearing;
-    telemetry_message.status = shedBoat_Telemetry_Status_UNDEFINED;
+		telemetry_message.location.true_heading = heading;
+		telemetry_message.location.true_bearing = bearing;
+		telemetry_message.location.speed_over_ground = NMEA::getSpeed();
+		telemetry_message.location.utc_seconds = NMEA::getSecond();
+
     telemetry_message.motor[0].motor_number = 1;
+		telemetry_message.motor[0].is_alive = motor_1.isAlive();
     telemetry_message.motor[0].rpm = motor_1.rpm();
+		telemetry_message.motor[0].temperature = motor_1.temperature();
+		telemetry_message.motor[0].voltage = motor_1.voltage();
+		telemetry_message.motor[1].motor_number = 2;
+		telemetry_message.motor[1].is_alive = motor_2.isAlive();
+    telemetry_message.motor[1].rpm = motor_2.rpm();
+		telemetry_message.motor[1].temperature = motor_2.temperature();
+		telemetry_message.motor[1].voltage = motor_2.voltage();
+
+		if(DEBUG_OUTPUT == 2){
+			uint8_t buffer[128];
+	    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
+			pb_encode(&stream, shedBoat_Telemetry_fields, &telemetry_message);
+			for (uint8_t i = 0; i < sizeof(buffer); i++) {
+				serial_output.putc(buffer[i]);
+			}
+		}
 }
 
 float updateSpeedOverGround()
 {
     speed_over_ground_pid.setProcessValue(NMEA::getSpeed());
-    return speed_over_ground_pid.compute(); // Need to pass this to a function aggregating bearing correction and speed.
+    return speed_over_ground_pid.compute();
 }
 
 float updateHeading()
 {
-	bearing = compass.smoothedBearing();
-    heading_pid.setProcessValue(heading_delta(
+	heading = heading_delta(
 		startHeading(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI),
 		bearing
-	));
-     // Please rename the function call to bearing.
-    return heading_pid.compute(); // Need to pass this to a function aggregating bearing correction and speed.
+	);
+	bearing = compass.smoothedBearing();
+  heading_pid.setProcessValue(heading);
+  return heading_pid.compute();
 }
 
 void updateMotors()
@@ -177,20 +200,25 @@ void updateMotors()
     // Grab new data from the motors
     motor_1.update();
     motor_2.update();
+		float throttle_compensation = 0;
+		float throttle_compensation_2 = 0;
     // If a motor is responsive, then calculate new throttle compensation and pass this to the motor. Also report back.
     if(motor_1.isAlive()){
         motor_1_pid.setProcessValue(motor_1.rpm());
-        usbSerial.printf("%d",motor_1.rpm());usbSerial.printf(" Actual Motor1 RPM\t\t");
-        float throttle_compensation = motor_1_pid.compute();
-        usbSerial.printf("%f",throttle_compensation);usbSerial.printf(" Throttle Compensation Motor1\t\t");
-        motor_1.set((short)throttle_compensation);
+				throttle_compensation = motor_1_pid.compute();
+				motor_1.set((short)throttle_compensation);
     }
     if(motor_2.isAlive()){
         motor_2_pid.setProcessValue(motor_2.rpm());
-        usbSerial.printf("%d",motor_2.rpm());usbSerial.printf(" Actual Motor2 RPM\t\t");
-        float throttle_compensation_2 = motor_2_pid.compute();
-        usbSerial.printf("%f",throttle_compensation_2);usbSerial.printf(" Throttle Compensation Motor2\t\t");
-        usbSerial.printf("\n\r");
-        motor_2.set((short)throttle_compensation_2);
+				throttle_compensation_2 = motor_2_pid.compute();
+				motor_2.set((short)throttle_compensation_2);
     }
+
+		if(DEBUG_OUTPUT == 1){
+			serial_output.printf("%d",motor_1.rpm());serial_output.printf(" Actual Motor1 RPM\t\t");
+			serial_output.printf("%f",throttle_compensation);serial_output.printf(" Throttle Compensation Motor1\t\t");
+			serial_output.printf("%d",motor_2.rpm());serial_output.printf(" Actual Motor2 RPM\t\t");
+			serial_output.printf("%f",throttle_compensation_2);serial_output.printf(" Throttle Compensation Motor2\t\t");
+			serial_output.printf("\n\r");
+		}
 }

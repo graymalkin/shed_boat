@@ -35,7 +35,7 @@
 
 Serial uart1(D1, D0);
 DigitalOut rxtx_led(LED_BLUE);
-extern Serial usbSerial;
+extern Serial serial_output;
 
 bool			NMEA::m_bFlagRead;						// flag used by the parser, when a valid sentence has begun
 bool			NMEA::m_bFlagDataReady;					// valid GPS fix and data available, user can call reader functions
@@ -90,7 +90,7 @@ void NMEA::fusedata() {
 
 	char c = uart1.getc();
 	rxtx_led = 0;
-	// usbSerial.putc(c);
+	// serial_output.putc(c);
 
 	if (c == '$') {
 		m_bFlagRead = true;
@@ -115,7 +115,7 @@ void NMEA::fusedata() {
 			// sentence complete, read done
 			m_bFlagRead = false;
 			// parse
-			// usbSerial.printf("*** Parsing NMEA ***\r\n");
+			// serial_output.printf("*** Parsing NMEA ***\r\n");
 			parsedata();
 		} else {
 			// computed m_nChecksum logic: count all chars between $ and * exclusively
@@ -152,7 +152,7 @@ void NMEA::parsedata() {
 	// check checksum, and return if invalid!
 	if (m_nChecksum != received_cks) {
 		//m_bFlagDataReady = false;
-		usbSerial.printf("*** Checksum check failed ***\r\n");
+		//serial_output.printf("*** Checksum check failed ***\r\n");
 		return;
 	}
 	/* $GPGGA
@@ -178,21 +178,21 @@ void NMEA::parsedata() {
 	 *  15   = Checksum
 	 */
 	if (mstrcmp(tmp_words[0], "$GNGGA") == 0) {
-		// usbSerial.printf("*** Parse Message `$GPGGA'\r\n");
+		// serial_output.printf("*** Parse Message `$GPGGA'\r\n");
 		// Check GPS Fix: 0=no fix, 1=GPS fix, 2=Dif. GPS fix
 		if (tmp_words[6][0] == '0') {
 			// clear data
 			res_fLatitude = 0;
 			res_fLongitude = 0;
 			m_bFlagDataReady = false;
-			// usbSerial.printf("*** [FAILED] Parse Message `$GPGGA'\r\n");
+			// serial_output.printf("*** [FAILED] Parse Message `$GPGGA'\r\n");
 			return;
 		}
 		// parse time
 		res_nUTCHour = digit2dec(tmp_words[1][0]) * 10 + digit2dec(tmp_words[1][1]);
 		res_nUTCMin = digit2dec(tmp_words[1][2]) * 10 + digit2dec(tmp_words[1][3]);
 		res_nUTCSec = digit2dec(tmp_words[1][4]) * 10 + digit2dec(tmp_words[1][5]);
-		// usbSerial.printf("*** $GPGGA: Time: %02d:%02d:%02d\r\n", res_nUTCHour, res_nUTCMin, res_nUTCSec);
+		// serial_output.printf("*** $GPGGA: Time: %02d:%02d:%02d\r\n", res_nUTCHour, res_nUTCMin, res_nUTCSec);
 
 		// parse latitude and longitude in NMEA format
 		res_fLatitude = string2float(tmp_words[2]);
@@ -238,7 +238,7 @@ void NMEA::parsedata() {
 	 *  12   = Checksum
 	 */
 	if (mstrcmp(tmp_words[0], "$GNRMC") == 0) {
-		// usbSerial.printf("*** Parse Message `$GPRMC'\r\n");
+		// serial_output.printf("*** Parse Message `$GPRMC'\r\n");
 
 		// Check data status: A-ok, V-invalid
 		if (tmp_words[2][0] == 'V') {
@@ -246,14 +246,14 @@ void NMEA::parsedata() {
 			res_fLatitude = 0;
 			res_fLongitude = 0;
 			m_bFlagDataReady = false;
-			// usbSerial.printf("*** [FAILED] Parse Message `$GPRMC'\r\n");
+			// serial_output.printf("*** [FAILED] Parse Message `$GPRMC'\r\n");
 			return;
 		}
 		// parse time
 		res_nUTCHour = digit2dec(tmp_words[1][0]) * 10 + digit2dec(tmp_words[1][1]);
 		res_nUTCMin = digit2dec(tmp_words[1][2]) * 10 + digit2dec(tmp_words[1][3]);
 		res_nUTCSec = digit2dec(tmp_words[1][4]) * 10 + digit2dec(tmp_words[1][5]);
-		// usbSerial.printf("*** $GPRMC: Time: %02d:%02d:%02d\r\n", res_nUTCHour, res_nUTCMin, res_nUTCSec);
+		// serial_output.printf("*** $GPRMC: Time: %02d:%02d:%02d\r\n", res_nUTCHour, res_nUTCMin, res_nUTCSec);
 
 		// parse latitude and longitude in NMEA format
 		res_fLatitude = string2float(tmp_words[3]);
@@ -291,7 +291,7 @@ void NMEA::parsedata() {
 	// *iD          checksum data
 
 	if (mstrcmp(tmp_words[0], "$GNGLL") == 0) {
-		// usbSerial.printf("*** Parse Message `$GNGLL'\r\n");
+		// serial_output.printf("*** Parse Message `$GNGLL'\r\n");
 		res_fLatitude = string2float(tmp_words[1]);
 		res_fLongitude = string2float(tmp_words[3]);
 		// get decimal format

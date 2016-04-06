@@ -44,7 +44,7 @@ float heading;
 shedBoat_Telemetry telemetry_message = shedBoat_Telemetry_init_zero;
 
 void beat();
-void etry();
+void send_telemetry();
 float updateSpeedOverGround();
 float updateHeading();
 void updateMotors();
@@ -114,7 +114,7 @@ int main() {
 		motor_2_pid.setSetPoint((speed_over_ground_compensation * (1-bearing_compensation) * Rpm_Limit)/max);
 	  updateMotors();
 
-	  etry();
+	  send_telemetry();
 		if(DEBUG_OUTPUT == 1){
 			serial_output.printf("Time:       %02d:%02d:%02d\r\n", NMEA::getHour(), NMEA::getMinute(), NMEA::getSecond());
 			serial_output.printf("Satellites: %d\r\n", NMEA::getSatellites());
@@ -145,7 +145,7 @@ void beat()
     heartbeat = !heartbeat;
 }
 
-void etry()
+void send_telemetry()
 {
 		telemetry_message.status = shedBoat_Telemetry_Status_UNDEFINED;
 

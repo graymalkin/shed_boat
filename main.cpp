@@ -45,6 +45,7 @@ float heading;
 
 //forward declarations
 void beat();
+void gps_satellite_telemetry();
 void send_telemetry();
 float updateSpeedOverGround();
 float updateHeading();
@@ -77,8 +78,6 @@ int main() {
   motor_2_pid.setOutputLimits(0.0, Throttle_Limit);
   motor_2_pid.setMode(AUTO_MODE);
 
-
-
 	speed_over_ground_pid.setSetPoint(2.5);
 	heading_pid.setSetPoint(0);
 
@@ -99,7 +98,10 @@ int main() {
 	compass.init();
 
 	// Wait for a valid GPS fix
-	//while(!NMEA::isDataReady());
+	while(NMEA::getSatellites() < 3) {
+		wait_ms(500);
+		gps_satellite_telemetry();
+	}
 
 	// Parkwood: 51.298997, 1.056683
 	// Chestfield: 51.349215, 1.066184
@@ -144,6 +146,27 @@ int main() {
 void beat()
 {
     heartbeat = !heartbeat;
+}
+
+void gps_satellite_telemetry() {
+	shedBoat_Telemetry telemetry_message = shedBoat_Telemetry_init_zero;
+
+	telemetry_message.status = shedBoat_Telemetry_Status_UNDEFINED;
+	telemetry_message.has_location = true;
+
+	telemetry_message.location.has_number_of_satellites_visible = true;
+	telemetry_message.location.number_of_satellites_visible = NMEA::getSatellites();
+
+	#if DEBUG_OUTPUT == 2
+				uint8_t buffer[100];
+		    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
+				bool success = pb_encode(&stream, shedBoat_Telemetry_fields, &telemetry_message);
+				if(success) {
+					sendXBeePacket(buffer, stream.bytes_written);
+				} else {
+					error("Failed to encode Proto Buffer");
+				}
+	#endif
 }
 
 void send_telemetry()

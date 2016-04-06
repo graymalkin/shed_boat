@@ -35,11 +35,11 @@
 
 Serial uart1(D1, D0);
 DigitalOut rxtx_led(LED_BLUE);
-extern Serial serial_output;
+// extern Serial serial_output;
 
 bool			NMEA::m_bFlagRead;						// flag used by the parser, when a valid sentence has begun
 bool			NMEA::m_bFlagDataReady;					// valid GPS fix and data available, user can call reader functions
-char			NMEA::tmp_words[50][80];				//	hold parsed words for one given NMEA sentence
+char			NMEA::tmp_words[20][80];				//	hold parsed words for one given NMEA sentence
 char			NMEA::tmp_szChecksum[15];				//	hold the received checksum for one given NMEA sentence
 
 // will be set to true for characters between $ and * only

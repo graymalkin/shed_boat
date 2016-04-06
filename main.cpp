@@ -8,8 +8,8 @@
 
 #include "boat.pb.h"
 
-// 0 = no serial debug, 1 = Verbose output (human readable), 2 = Protocol buffer output
-#define DEBUG_OUTPUT 1
+// 0 = no xbee debug, 1 = Verbose output (human readable), 2 = Protocol buffer output
+#define DEBUG_OUTPUT 2
 #define ESC_ADDRESS_0 0x2B
 #define ESC_ADDRESS_1 0x2A
 #define RATE 0.1
@@ -24,7 +24,9 @@
 #define DECLINATION_ANGLE ((-16.0*M_PI)/(60.0*180.0))
 #include "HMC5883L.h"
 
-Serial serial_output(USBTX, USBRX);
+//Serial host(USBTX, USBRX);
+Serial xbee(PTC4, PTC3);
+
 I2C i2c(D14, D15);
 DigitalOut heartbeat(LED_GREEN);
 HMC5883L compass(i2c);
@@ -40,60 +42,64 @@ PID motor_2_pid(0.5, 1, 0, RATE);
 
 double bearing;
 float heading;
-// We are using the nanopb version of protocol buffers.
-shedBoat_Telemetry telemetry_message = shedBoat_Telemetry_init_zero;
 
+//forward declarations
 void beat();
 void send_telemetry();
 float updateSpeedOverGround();
 float updateHeading();
 void updateMotors();
+void sendXBeePacket(uint8_t* payload, uint8_t payload_len);
 
 int main() {
-	serial_output.baud(115200);
+	//host.baud(115200);
+	xbee.baud(9600);
 
-    Ticker heartbeat_tkr;
-    heartbeat_tkr.attach_us(&beat, 250000);
+  Ticker heartbeat_tkr;
+  heartbeat_tkr.attach_us(&beat, 250000);
 
-    i2c.frequency (400);
+  i2c.frequency (400);
 
 	// Initialise PIDs
-    speed_over_ground_pid.setInputLimits(0.0,  Speed_In_Knots_Limit); // Assuming speed is in knots -- check this!
-    speed_over_ground_pid.setOutputLimits(0.0, 1.0);
-    speed_over_ground_pid.setMode(AUTO_MODE);
+  speed_over_ground_pid.setInputLimits(0.0,  Speed_In_Knots_Limit); // Assuming speed is in knots -- check this!
+  speed_over_ground_pid.setOutputLimits(0.0, 1.0);
+  speed_over_ground_pid.setMode(AUTO_MODE);
 
-    heading_pid.setInputLimits(-180,180);
-    heading_pid.setOutputLimits(0.0, 1.0);
-    heading_pid.setMode(AUTO_MODE);
+  heading_pid.setInputLimits(-180,180);
+  heading_pid.setOutputLimits(0.0, 1.0);
+  heading_pid.setMode(AUTO_MODE);
 
-    motor_1_pid.setInputLimits(0.0,  Rpm_Limit);
-    motor_1_pid.setOutputLimits(0.0, Throttle_Limit);
-    motor_1_pid.setMode(AUTO_MODE);
+  motor_1_pid.setInputLimits(0.0,  Rpm_Limit);
+  motor_1_pid.setOutputLimits(0.0, Throttle_Limit);
+  motor_1_pid.setMode(AUTO_MODE);
 
-    motor_2_pid.setInputLimits(0.0,  Rpm_Limit);
-    motor_2_pid.setOutputLimits(0.0, Throttle_Limit);
-    motor_2_pid.setMode(AUTO_MODE);
+  motor_2_pid.setInputLimits(0.0,  Rpm_Limit);
+  motor_2_pid.setOutputLimits(0.0, Throttle_Limit);
+  motor_2_pid.setMode(AUTO_MODE);
 
 
 
 	speed_over_ground_pid.setSetPoint(2.5);
-  	heading_pid.setSetPoint(0);
-	if(DEBUG_OUTPUT == 1){
-		serial_output.printf(	"     _              _   _                 _   \r\n"
-							"    | |            | | | |               | |  \r\n"
-							" ___| |__   ___  __| | | |__   ___   __ _| |_ \r\n"
-							"/ __| '_ \\ / _ \\/ _` | | '_ \\ / _ \\ / _` | __|\r\n"
-							"\\__ \\ | | |  __/ (_| | | |_) | (_) | (_| | |_ \r\n"
-							"|___/_| |_|\\___|\\__,_| |_.__/ \\___/ \\__,_|\\__|\r\n"
-							"                   ______                     \r\n"
-							"                  |______|\r\n"
-							"\r\n\n");
-	}
+	heading_pid.setSetPoint(0);
+
+#if DEBUG_OUTPUT == 1
+	host.printf(	"     _              _   _                 _   \r\n"
+								"    | |            | | | |               | |  \r\n"
+								" ___| |__   ___  __| | | |__   ___   __ _| |_ \r\n"
+								"/ __| '_ \\ / _ \\/ _` | | '_ \\ / _ \\ / _` | __|\r\n"
+								"\\__ \\ | | |  __/ (_| | | |_) | (_) | (_| | |_ \r\n"
+								"|___/_| |_|\\___|\\__,_| |_.__/ \\___/ \\__,_|\\__|\r\n"
+								"                   ______                     \r\n"
+								"                  |______|\r\n"
+								"\r\n\n");
+#endif
+
 	NMEA::init();
+
 	compass.init();
 
 	// Wait for a valid GPS fix
-	while(!NMEA::isDataReady());
+	//while(!NMEA::isDataReady());
 
 	// Parkwood: 51.298997, 1.056683
 	// Chestfield: 51.349215, 1.066184
@@ -102,8 +108,7 @@ int main() {
 	motor_2.set(0);
 	wait(1);
 
-	while(1)
-    {
+	while(1) {
 		wait_ms(500);
 		float bearing_compensation = updateHeading();
 		float speed_over_ground_compensation = updateSpeedOverGround();
@@ -115,29 +120,25 @@ int main() {
 	  updateMotors();
 
 	  send_telemetry();
-		if(DEBUG_OUTPUT == 1){
-			serial_output.printf("Time:       %02d:%02d:%02d\r\n", NMEA::getHour(), NMEA::getMinute(), NMEA::getSecond());
-			serial_output.printf("Satellites: %d\r\n", NMEA::getSatellites());
-			serial_output.printf("Latitude:   %0.5f\r\n", NMEA::getLatitude());
-			serial_output.printf("Longitude:  %0.5f\r\n", NMEA::getLongitude());
-			serial_output.printf("Altitude:   %0.2fm\r\n", NMEA::getAltitude());
-			serial_output.printf("Speed:      %0.2fkm/h\r\n", NMEA::getSpeed());
-			serial_output.printf("GPS Bearing (Track made good):    %0.2f degrees\r\n", NMEA::getBearing());
-	    serial_output.printf("Compass Bearing: %03.0f\r\n", bearing);
-			serial_output.printf("Heading Delta to South: %03.0f\r\n", heading_delta(bearing, 180.0));
-			serial_output.printf("Distance to Parkwood %06.2fm\r\n",
-			equirectangular(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()),
-							degToRad(51.298997), degToRad(1.056683))
-			);
+#if DEBUG_OUTPUT == 1
+		host.printf("Time:       %02d:%02d:%02d\r\n", NMEA::getHour(), NMEA::getMinute(), NMEA::getSecond());
+		host.printf("Satellites: %d\r\n", NMEA::getSatellites());
+		host.printf("Latitude:   %0.5f\r\n", NMEA::getLatitude());
+		host.printf("Longitude:  %0.5f\r\n", NMEA::getLongitude());
+		host.printf("Altitude:   %0.2fm\r\n", NMEA::getAltitude());
+		host.printf("Speed:      %0.2fkm/h\r\n", NMEA::getSpeed());
+		host.printf("GPS Bearing (Track made good):    %0.2f degrees\r\n", NMEA::getBearing());
+    host.printf("Compass Bearing: %03.0f\r\n", bearing);
+		host.printf("Heading Delta to South: %03.0f\r\n", heading_delta(180.0, bearing));
+		host.printf("Distance to Parkwood %06.2fm\r\n",
+				equirectangular(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()),degToRad(51.298997), degToRad(1.056683))
+		);
 
-			serial_output.printf("Heading to Parkwood %03.0f\r\n",
-				heading_delta(
-					startHeading(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI),
-					bearing
-				)
-			);
-		}
-    }
+		host.printf("Heading to Parkwood %03.0f\r\n",
+			heading_delta( heading, bearing )
+		);
+#endif
+  }
 }
 
 void beat()
@@ -147,35 +148,58 @@ void beat()
 
 void send_telemetry()
 {
-		telemetry_message.status = shedBoat_Telemetry_Status_UNDEFINED;
+		shedBoat_Telemetry telemetry_message = shedBoat_Telemetry_init_zero;
 
+		telemetry_message.status = shedBoat_Telemetry_Status_STATIONARY;
+
+		telemetry_message.has_location = true;
+		telemetry_message.location.has_latitude = true;
     telemetry_message.location.latitude = NMEA::getLatitude();
+		telemetry_message.location.has_longitude = true;
     telemetry_message.location.longitude = NMEA::getLongitude();
+		telemetry_message.location.has_number_of_satellites_visible = true;
     telemetry_message.location.number_of_satellites_visible = NMEA::getSatellites();
+		telemetry_message.location.has_true_heading = true;
 		telemetry_message.location.true_heading = heading;
+		telemetry_message.location.has_true_bearing = true;
 		telemetry_message.location.true_bearing = bearing;
+		telemetry_message.location.has_speed_over_ground = true;
 		telemetry_message.location.speed_over_ground = NMEA::getSpeed();
+		telemetry_message.location.has_utc_seconds = true;
 		telemetry_message.location.utc_seconds = NMEA::getSecond();
 
+		telemetry_message.motor_count = 2;
     telemetry_message.motor[0].motor_number = 1;
+		telemetry_message.motor[0].has_is_alive = true;
 		telemetry_message.motor[0].is_alive = motor_1.isAlive();
+		telemetry_message.motor[0].has_rpm = true;
     telemetry_message.motor[0].rpm = motor_1.rpm();
+		telemetry_message.motor[0].has_temperature = true;
 		telemetry_message.motor[0].temperature = motor_1.temperature();
+		telemetry_message.motor[0].has_voltage = true;
 		telemetry_message.motor[0].voltage = motor_1.voltage();
 		telemetry_message.motor[1].motor_number = 2;
+		telemetry_message.motor[1].has_is_alive = true;
 		telemetry_message.motor[1].is_alive = motor_2.isAlive();
+		telemetry_message.motor[1].has_rpm = true;
     telemetry_message.motor[1].rpm = motor_2.rpm();
+		telemetry_message.motor[1].has_temperature = true;
 		telemetry_message.motor[1].temperature = motor_2.temperature();
+		telemetry_message.motor[1].has_voltage = true;
 		telemetry_message.motor[1].voltage = motor_2.voltage();
 
-		if(DEBUG_OUTPUT == 2){
-			uint8_t buffer[128];
+		telemetry_message.has_battery = false;
+
+#if DEBUG_OUTPUT == 2
+			uint8_t buffer[100];
 	    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
-			pb_encode(&stream, shedBoat_Telemetry_fields, &telemetry_message);
-			for (size_t i = 0; i <	stream.bytes_written; i++) {
-				serial_output.putc(buffer[i]);
+			bool success = pb_encode(&stream, shedBoat_Telemetry_fields, &telemetry_message);
+			if(success) {
+				sendXBeePacket(buffer, stream.bytes_written);
+			} else {
+				error("Failed to encode Proto Buffer");
 			}
-		}
+#endif
 }
 
 float updateSpeedOverGround()
@@ -186,12 +210,10 @@ float updateSpeedOverGround()
 
 float updateHeading()
 {
-	heading = heading_delta(
-		startHeading(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI),
-		bearing
-	);
 	bearing = compass.smoothedBearing();
-  heading_pid.setProcessValue(heading);
+	heading = startHeading(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI);
+
+  heading_pid.setProcessValue(heading_delta(heading,bearing));
   return heading_pid.compute();
 }
 
@@ -214,11 +236,52 @@ void updateMotors()
 				motor_2.set((short)throttle_compensation_2);
     }
 
-		if(DEBUG_OUTPUT == 1){
-			serial_output.printf("%d",motor_1.rpm());serial_output.printf(" Actual Motor1 RPM\t\t");
-			serial_output.printf("%f",throttle_compensation);serial_output.printf(" Throttle Compensation Motor1\t\t");
-			serial_output.printf("%d",motor_2.rpm());serial_output.printf(" Actual Motor2 RPM\t\t");
-			serial_output.printf("%f",throttle_compensation_2);serial_output.printf(" Throttle Compensation Motor2\t\t");
-			serial_output.printf("\n\r");
-		}
+#if DEBUG_OUTPUT == 1
+			host.printf("%d",motor_1.rpm());host.printf(" Actual Motor1 RPM\t\t");
+			host.printf("%f",throttle_compensation);host.printf(" Throttle Compensation Motor1\t\t");
+			host.printf("%d",motor_2.rpm());host.printf(" Actual Motor2 RPM\t\t");
+			host.printf("%f",throttle_compensation_2);host.printf(" Throttle Compensation Motor2\t\t");
+			host.printf("\n\r");
+#endif
+}
+
+void sendXBeePacket(uint8_t* payload, uint8_t payload_len) {
+
+	xbee.putc(0x7E); // Starting delimiter
+	xbee.putc(0x00); // Length (MSB)
+	xbee.putc((uint8_t)(payload_len + 14)); // Length (LSB)
+
+	// Frame content
+	xbee.putc(0x10); // Frame type, transmit
+	xbee.putc(0x01); // Frame ID
+
+	// Coordinator address (64 bit address)
+	xbee.putc(0x00);
+	xbee.putc(0x00);
+	xbee.putc(0x00);
+	xbee.putc(0x00);
+	xbee.putc(0x00);
+	xbee.putc(0x00);
+	xbee.putc(0xFF);
+	xbee.putc(0xFF);
+
+	// 16 bit address
+	xbee.putc(0xFF); // 16 bit 0xFFFE = unknown or broadcast
+	xbee.putc(0xFE);
+
+	// Options
+	xbee.putc(0x00);
+
+	// Broadcast Range
+	xbee.putc(0x00);
+
+	//checksum is the sum all constant bytes except start delimiter and length
+	uint8_t checksum = (uint8_t)(0x10 + 0x01 + 0xFF + 0xFF + 0xFF + 0xFE);
+
+	for(uint8_t i=0; i<payload_len; i++) {
+		checksum += payload[i];
+		xbee.putc(payload[i]);
+	}
+
+	xbee.putc(0xFF-checksum);
 }

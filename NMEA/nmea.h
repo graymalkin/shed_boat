@@ -35,7 +35,7 @@ class NMEA {
 public:
 		static bool			m_bFlagRead;					// flag used by the parser, when a valid sentence has begun
 		static bool			m_bFlagDataReady;				// valid GPS fix and data available, user can call reader functions
-		static char			tmp_words[50][80];				//	hold parsed words for one given NMEA sentence
+		static char			tmp_words[20][80];				//	hold parsed words for one given NMEA sentence
 		static char			tmp_szChecksum[15];				//	hold the received checksum for one given NMEA sentence
 
 		// will be set to true for characters between $ and * only

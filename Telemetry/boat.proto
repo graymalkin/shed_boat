@@ -14,6 +14,7 @@ message Telemetry {
   optional Location location = 2;
   repeated Motor motor = 3;
   optional Battery battery = 4;
+  optional Debug debug = 5;
 }
 
 message Location{
@@ -42,4 +43,11 @@ message Battery {
   }
   optional int32 percent_full = 1;
   repeated Cell cell = 2;
+}
+
+message Debug {
+  optional int32 bearing_compensation = 1;
+  optional int32 speed_over_ground_compensation = 2;
+  optional int32 motor_1_throttle_compensation = 3;
+  optional int32 motor_2_throttle_compensation = 4;
 }

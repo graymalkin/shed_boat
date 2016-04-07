@@ -240,11 +240,11 @@ void send_telemetry()
 	telemetry_message.location.has_number_of_satellites_visible = true;
 	telemetry_message.location.number_of_satellites_visible = NMEA::getSatellites();
 	telemetry_message.location.has_true_heading = true;
-	telemetry_message.location.true_heading = heading;
+	telemetry_message.location.true_heading = heading * 1000;
 	telemetry_message.location.has_true_bearing = true;
-	telemetry_message.location.true_bearing = bearing;
+	telemetry_message.location.true_bearing = bearing * 1000;
 	telemetry_message.location.has_speed_over_ground = true;
-	telemetry_message.location.speed_over_ground = NMEA::getSpeed();
+	telemetry_message.location.speed_over_ground = NMEA::getSpeed() * 1000;
 	telemetry_message.location.has_utc_seconds = true;
 	telemetry_message.location.utc_seconds = NMEA::getSecond();
 
@@ -272,13 +272,13 @@ void send_telemetry()
 
 	telemetry_message.has_debug = true;
 	telemetry_message.debug.has_bearing_compensation = true;
-	telemetry_message.debug.bearing_compensation = bearing_compensation;
+	telemetry_message.debug.bearing_compensation = bearing_compensation * 1000;
 	telemetry_message.debug.has_speed_over_ground_compensation = true;
-	telemetry_message.debug.speed_over_ground_compensation = speed_over_ground_compensation;
+	telemetry_message.debug.speed_over_ground_compensation = speed_over_ground_compensation * 1000;
 	telemetry_message.debug.has_motor_1_throttle_compensation = true;
-	telemetry_message.debug.motor_1_throttle_compensation = throttle_compensation;
+	telemetry_message.debug.motor_1_throttle_compensation = throttle_compensation * 1000;
 	telemetry_message.debug.has_motor_2_throttle_compensation = true;
-	telemetry_message.debug.motor_2_throttle_compensation = throttle_compensation_2;
+	telemetry_message.debug.motor_2_throttle_compensation = throttle_compensation_2 * 1000;
 
 	uint8_t buffer[100];
 	pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));

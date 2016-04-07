@@ -21,9 +21,9 @@ message Location{
   optional float latitude = 1;
   optional float longitude = 2;
   optional int32 number_of_satellites_visible = 3;
-  optional int32 speed_over_ground = 4;
-  optional int32 true_heading = 5;
-  optional int32 true_bearing = 6;
+  optional float speed_over_ground = 4;
+  optional float true_heading = 5;
+  optional double true_bearing = 6;
   optional int32 utc_seconds = 7;
 }
 
@@ -46,8 +46,8 @@ message Battery {
 }
 
 message Debug {
-  optional int32 bearing_compensation = 1;
-  optional int32 speed_over_ground_compensation = 2;
-  optional int32 motor_1_throttle_compensation = 3;
-  optional int32 motor_2_throttle_compensation = 4;
+  optional float bearing_compensation = 1;
+  optional float speed_over_ground_compensation = 2;
+  optional float motor_1_throttle_compensation = 3;
+  optional float motor_2_throttle_compensation = 4;
 }

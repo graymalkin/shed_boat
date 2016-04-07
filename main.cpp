@@ -8,8 +8,9 @@
 
 #include "boat.pb.h"
 
-// 0 = no xbee debug, 1 = Verbose output (human readable), 2 = Protocol buffer output
-#define DEBUG_OUTPUT 2
+//#define DEBUG
+#define SEND_TELEMETRY
+
 #define ESC_ADDRESS_0 0x2B
 #define ESC_ADDRESS_1 0x2A
 
@@ -34,7 +35,13 @@ volatile bool updateMotor = true;
 #define DECLINATION_ANGLE ((-16.0*M_PI)/(60.0*180.0))
 #include "HMC5883L.h"
 
-//Serial host(USBTX, USBRX);
+#ifdef DEBUG
+	Serial host(USBTX, USBRX);
+	#define DEBUG_OUTPUT(...) host.printf(__VA_ARGS__)
+#else
+	#define DEBUG_OUTPUT(...)
+#endif
+
 Serial xbee(PTC4, PTC3);
 
 I2C i2c(D14, D15);
@@ -45,8 +52,8 @@ SimonK_I2C_ESC motor_1(i2c, ESC_ADDRESS_0,6);
 SimonK_I2C_ESC motor_2(i2c, ESC_ADDRESS_1,6);
 
 // PID declarations
-PID speed_over_ground_pid(0.5, 1, 0, updateTrack / 1000.0);
-PID heading_pid(0.5, 1, 0, updateTrack / 1000.0);
+PID speed_over_ground_pid(0.5, 1, 0, TRACK_UPDATE_RATE / 1000.0);
+PID heading_pid(0.5, 1, 0, TRACK_UPDATE_RATE / 1000.0);
 PID motor_1_pid(0.5, 1, 0, MOTOR_UPDATE_RATE / 1000.0);
 PID motor_2_pid(0.5, 1, 0, MOTOR_UPDATE_RATE / 1000.0);
 
@@ -100,8 +107,7 @@ int main() {
 	speed_over_ground_pid.setSetPoint(2.5);
 	heading_pid.setSetPoint(0);
 
-#if DEBUG_OUTPUT == 1
-	host.printf(	"     _              _   _                 _   \r\n"
+	DEBUG_OUTPUT(	"     _              _   _                 _   \r\n"
 								"    | |            | | | |               | |  \r\n"
 								" ___| |__   ___  __| | | |__   ___   __ _| |_ \r\n"
 								"/ __| '_ \\ / _ \\/ _` | | '_ \\ / _ \\ / _` | __|\r\n"
@@ -110,7 +116,6 @@ int main() {
 								"                   ______                     \r\n"
 								"                  |______|\r\n"
 								"\r\n\n");
-#endif
 
 	NMEA::init();
 
@@ -193,97 +198,97 @@ void gps_satellite_telemetry() {
 	telemetry_message.location.has_number_of_satellites_visible = true;
 	telemetry_message.location.number_of_satellites_visible = NMEA::getSatellites();
 
-	#if DEBUG_OUTPUT == 2
-				uint8_t buffer[100];
-		    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
-				bool success = pb_encode(&stream, shedBoat_Telemetry_fields, &telemetry_message);
-				if(success) {
-					sendXBeePacket(buffer, stream.bytes_written);
-				} else {
-					error("Failed to encode Proto Buffer");
-				}
-	#endif
+#ifdef SEND_TELEMETRY
+	uint8_t buffer[100];
+  pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
+	bool success = pb_encode(&stream, shedBoat_Telemetry_fields, &telemetry_message);
+	if(success) {
+		sendXBeePacket(buffer, stream.bytes_written);
+	} else {
+		error("Failed to encode Proto Buffer");
+	}
+#endif
 }
 
 void send_telemetry()
 {
-		#if DEBUG_OUTPUT == 1
-				host.printf("Time:       %02d:%02d:%02d\r\n", NMEA::getHour(), NMEA::getMinute(), NMEA::getSecond());
-				host.printf("Satellites: %d\r\n", NMEA::getSatellites());
-				host.printf("Latitude:   %0.5f\r\n", NMEA::getLatitude());
-				host.printf("Longitude:  %0.5f\r\n", NMEA::getLongitude());
-				host.printf("Altitude:   %0.2fm\r\n", NMEA::getAltitude());
-				host.printf("Speed:      %0.2fkm/h\r\n", NMEA::getSpeed());
-				host.printf("GPS Bearing (Track made good):    %0.2f degrees\r\n", NMEA::getBearing());
-		    host.printf("Compass Bearing: %03.0f\r\n", bearing);
-				host.printf("Heading Delta to South: %03.0f\r\n", heading_delta(180.0, bearing));
-				host.printf("Distance to Parkwood %06.2fm\r\n",
-						equirectangular(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()),degToRad(51.298997), degToRad(1.056683))
-				);
+	DEBUG_OUTPUT("Time:       %02d:%02d:%02d\r\n", NMEA::getHour(), NMEA::getMinute(), NMEA::getSecond());
+	DEBUG_OUTPUT("Satellites: %d\r\n", NMEA::getSatellites());
+	DEBUG_OUTPUT("Latitude:   %0.5f\r\n", NMEA::getLatitude());
+	DEBUG_OUTPUT("Longitude:  %0.5f\r\n", NMEA::getLongitude());
+	DEBUG_OUTPUT("Altitude:   %0.2fm\r\n", NMEA::getAltitude());
+	DEBUG_OUTPUT("Speed:      %0.2fkm/h\r\n", NMEA::getSpeed());
+	DEBUG_OUTPUT("GPS Bearing (Track made good):    %0.2f degrees\r\n", NMEA::getBearing());
+  DEBUG_OUTPUT("Compass Bearing: %03.0f\r\n", bearing);
+	DEBUG_OUTPUT("Heading Delta to South: %03.0f\r\n", heading_delta(180.0, bearing));
+	DEBUG_OUTPUT("Distance to Parkwood %06.2fm\r\n",
+			equirectangular(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()),degToRad(51.298997), degToRad(1.056683))
+	);
 
-				host.printf("Heading to Parkwood %03.0f\r\n",
-					heading_delta( heading, bearing )
-				);
-		#endif
+	DEBUG_OUTPUT("Heading to Parkwood %03.0f\r\n", heading_delta( heading, bearing ) );
 
-		#if DEBUG_OUTPUT == 2
-					shedBoat_Telemetry telemetry_message = shedBoat_Telemetry_init_zero;
+#ifdef SEND_TELEMETRY
+	shedBoat_Telemetry telemetry_message = shedBoat_Telemetry_init_zero;
 
-					telemetry_message.status = shedBoat_Telemetry_Status_STATIONARY;
+	telemetry_message.status = shedBoat_Telemetry_Status_STATIONARY;
 
-					telemetry_message.has_location = true;
-					telemetry_message.location.has_latitude = true;
-					telemetry_message.location.latitude = NMEA::getLatitude();
-					telemetry_message.location.has_longitude = true;
-					telemetry_message.location.longitude = NMEA::getLongitude();
-					telemetry_message.location.has_number_of_satellites_visible = true;
-					telemetry_message.location.number_of_satellites_visible = NMEA::getSatellites();
-					telemetry_message.location.has_true_heading = true;
-					telemetry_message.location.true_heading = heading;
-					telemetry_message.location.has_true_bearing = true;
-					telemetry_message.location.true_bearing = bearing;
-					telemetry_message.location.has_speed_over_ground = true;
-					telemetry_message.location.speed_over_ground = NMEA::getSpeed();
-					telemetry_message.location.has_utc_seconds = true;
-					telemetry_message.location.utc_seconds = NMEA::getSecond();
+	telemetry_message.has_location = true;
+	telemetry_message.location.has_latitude = true;
+	telemetry_message.location.latitude = NMEA::getLatitude();
+	telemetry_message.location.has_longitude = true;
+	telemetry_message.location.longitude = NMEA::getLongitude();
+	telemetry_message.location.has_number_of_satellites_visible = true;
+	telemetry_message.location.number_of_satellites_visible = NMEA::getSatellites();
+	telemetry_message.location.has_true_heading = true;
+	telemetry_message.location.true_heading = heading;
+	telemetry_message.location.has_true_bearing = true;
+	telemetry_message.location.true_bearing = bearing;
+	telemetry_message.location.has_speed_over_ground = true;
+	telemetry_message.location.speed_over_ground = NMEA::getSpeed();
+	telemetry_message.location.has_utc_seconds = true;
+	telemetry_message.location.utc_seconds = NMEA::getSecond();
 
-					telemetry_message.motor_count = 2;
-					telemetry_message.motor[0].motor_number = 1;
-					telemetry_message.motor[0].has_is_alive = true;
-					telemetry_message.motor[0].is_alive = motor_1.isAlive();
-					telemetry_message.motor[0].has_rpm = true;
-					telemetry_message.motor[0].rpm = motor_1.rpm();
-					telemetry_message.motor[0].has_temperature = true;
-					telemetry_message.motor[0].temperature = motor_1.temperature();
-					telemetry_message.motor[0].has_voltage = true;
-					telemetry_message.motor[0].voltage = motor_1.voltage();
-					telemetry_message.motor[1].motor_number = 2;
-					telemetry_message.motor[1].has_is_alive = true;
-					telemetry_message.motor[1].is_alive = motor_2.isAlive();
-					telemetry_message.motor[1].has_rpm = true;
-					telemetry_message.motor[1].rpm = motor_2.rpm();
-					telemetry_message.motor[1].has_temperature = true;
-					telemetry_message.motor[1].temperature = motor_2.temperature();
-					telemetry_message.motor[1].has_voltage = true;
-					telemetry_message.motor[1].voltage = motor_2.voltage();
+	telemetry_message.motor_count = 2;
+	telemetry_message.motor[0].motor_number = 1;
+	telemetry_message.motor[0].has_is_alive = true;
+	telemetry_message.motor[0].is_alive = motor_1.isAlive();
+	telemetry_message.motor[0].has_rpm = true;
+	telemetry_message.motor[0].rpm = motor_1.rpm();
+	telemetry_message.motor[0].has_temperature = true;
+	telemetry_message.motor[0].temperature = motor_1.temperature();
+	telemetry_message.motor[0].has_voltage = true;
+	telemetry_message.motor[0].voltage = motor_1.voltage();
+	telemetry_message.motor[1].motor_number = 2;
+	telemetry_message.motor[1].has_is_alive = true;
+	telemetry_message.motor[1].is_alive = motor_2.isAlive();
+	telemetry_message.motor[1].has_rpm = true;
+	telemetry_message.motor[1].rpm = motor_2.rpm();
+	telemetry_message.motor[1].has_temperature = true;
+	telemetry_message.motor[1].temperature = motor_2.temperature();
+	telemetry_message.motor[1].has_voltage = true;
+	telemetry_message.motor[1].voltage = motor_2.voltage();
 
-					telemetry_message.has_battery = false;
+	telemetry_message.has_battery = false;
 
-					telemetry_message.has_debug = true;
-					telemetry_message.debug.bearing_compensation = bearing_compensation;
-					telemetry_message.debug.speed_over_ground_compensation = speed_over_ground_compensation;
-					telemetry_message.debug.motor_1_throttle_compensation = throttle_compensation;
-					telemetry_message.debug.motor_2_throttle_compensation = throttle_compensation_2;
+	telemetry_message.has_debug = true;
+	telemetry_message.debug.has_bearing_compensation = true;
+	telemetry_message.debug.bearing_compensation = bearing_compensation;
+	telemetry_message.debug.has_speed_over_ground_compensation = true;
+	telemetry_message.debug.speed_over_ground_compensation = speed_over_ground_compensation;
+	telemetry_message.debug.has_motor_1_throttle_compensation = true;
+	telemetry_message.debug.motor_1_throttle_compensation = throttle_compensation;
+	telemetry_message.debug.has_motor_2_throttle_compensation = true;
+	telemetry_message.debug.motor_2_throttle_compensation = throttle_compensation_2;
 
-					uint8_t buffer[100];
-			    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
-					bool success = pb_encode(&stream, shedBoat_Telemetry_fields, &telemetry_message);
-					if(success) {
-						sendXBeePacket(buffer, stream.bytes_written);
-					} else {
-						error("Failed to encode Proto Buffer");
-					}
-		#endif
+	uint8_t buffer[100];
+	pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
+	bool success = pb_encode(&stream, shedBoat_Telemetry_fields, &telemetry_message);
+	if(success) {
+		sendXBeePacket(buffer, stream.bytes_written);
+	} else {
+		error("Failed to encode Proto Buffer");
+	}
+#endif
 }
 
 float updateSpeedOverGround()
@@ -304,24 +309,21 @@ float updateHeading()
 void updateMotors()
 {
     // If a motor is responsive, then calculate new throttle compensation and pass this to the motor. Also report back.
-    if(motor_1.isAlive()){
-        motor_1_pid.setProcessValue(motor_1.rpm());
-				throttle_compensation = motor_1_pid.compute();
-				motor_1.set((short)throttle_compensation);
-    }
-    if(motor_2.isAlive()){
-        motor_2_pid.setProcessValue(motor_2.rpm());
-				throttle_compensation_2 = motor_2_pid.compute();
-				motor_2.set((short)throttle_compensation_2);
-    }
+  if(motor_1.isAlive()){
+      motor_1_pid.setProcessValue(motor_1.rpm());
+			throttle_compensation = motor_1_pid.compute();
+			motor_1.set((short)throttle_compensation);
+  }
+  if(motor_2.isAlive()){
+      motor_2_pid.setProcessValue(motor_2.rpm());
+			throttle_compensation_2 = motor_2_pid.compute();
+			motor_2.set((short)throttle_compensation_2);
+  }
 
-#if DEBUG_OUTPUT == 1
-			host.printf("%d",motor_1.rpm());host.printf(" Actual Motor1 RPM\t\t");
-			host.printf("%f",throttle_compensation);host.printf(" Throttle Compensation Motor1\t\t");
-			host.printf("%d",motor_2.rpm());host.printf(" Actual Motor2 RPM\t\t");
-			host.printf("%f",throttle_compensation_2);host.printf(" Throttle Compensation Motor2\t\t");
-			host.printf("\n\r");
-#endif
+	DEBUG_OUTPUT("Motor 1 RPM: %d\t\t",motor_1.rpm());
+	DEBUG_OUTPUT("Throttle Compensation 1: %f\t\t",throttle_compensation);
+	DEBUG_OUTPUT("Motor 2 RPM: %d\t\t",motor_2.rpm());
+	DEBUG_OUTPUT("Throttle Compensation 2: %f\r\n",throttle_compensation_2);
 }
 
 void sendXBeePacket(uint8_t* payload, uint8_t payload_len) {

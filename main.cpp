@@ -11,8 +11,8 @@
 //#define DEBUG
 #define SEND_TELEMETRY
 
-#define ESC_ADDRESS_0 0x2B
-#define ESC_ADDRESS_1 0x2A
+#define LEFT_MOTOR_ESC_ADDRESS 0x2B
+#define RIGHT_MOTOR_ESC_ADDRESS 0x2A
 
 // 'Scheduler' Stuff in milliseconds
 #define TELEMETRY_UPDATE_RATE 5000
@@ -20,15 +20,9 @@
 #define MOTOR_UPDATE_RATE 500
 #define HEARTBEAT_UPDATE_RATE 500
 
-volatile bool updateTelemetry = true;
-volatile bool updateTrack = true;
-volatile bool updateMotor = true;
-
 // PID Limits
-#define Rpm_Limit 8913.0
-#define Throttle_Limit 32767.0
-#define Speed_In_Knots_Limit 3.5
-#define PID_RATE 0.5
+#define THROTTLE_LIMIT 32767.0
+#define SPEED_IN_KNOTS_LIMIT 3.5
 
 // Test for correctness when in a room that does produce it's own magnetic field...
 // Magnetic Declination for Canterbury = WEST 0deg 16min
@@ -48,22 +42,29 @@ I2C i2c(D14, D15);
 DigitalOut heartbeat(LED_GREEN);
 HMC5883L compass(i2c);
 
-SimonK_I2C_ESC motor_1(i2c, ESC_ADDRESS_0,6);
-SimonK_I2C_ESC motor_2(i2c, ESC_ADDRESS_1,6);
+SimonK_I2C_ESC leftMotor(i2c, LEFT_MOTOR_ESC_ADDRESS,6);
+SimonK_I2C_ESC rightMotor(i2c, RIGHT_MOTOR_ESC_ADDRESS,6);
+float rightThrottle = 0;
+float leftThrottle = 0;
 
 // PID declarations
-PID speed_over_ground_pid(0.5, 1, 0, TRACK_UPDATE_RATE / 1000.0);
-PID heading_pid(0.5, 1, 0, TRACK_UPDATE_RATE / 1000.0);
-PID motor_1_pid(0.5, 1, 0, MOTOR_UPDATE_RATE / 1000.0);
-PID motor_2_pid(0.5, 1, 0, MOTOR_UPDATE_RATE / 1000.0);
+PID speedOverGroundPid(0.5, 1, 0, TRACK_UPDATE_RATE / 1000.0);
+PID headingPid(0.5, 1, 0, TRACK_UPDATE_RATE / 1000.0);
+
+//Scheduler declarations
+volatile bool updateTelemetry = true;
+volatile bool updateTrackAndSpeed = true;
+volatile bool updateMotor = true;
 
 double bearing;
 float heading;
+float bearingCompensation;
+float speedOverGroundCompensation;
 
 //forward declarations
 void beat();
 void telemetry_update_ISR();
-void track_update_ISR();
+void track_and_speed_update_ISR();
 void motor_update_ISR();
 void gps_satellite_telemetry();
 void send_telemetry();
@@ -71,12 +72,6 @@ float updateSpeedOverGround();
 float updateHeading();
 void updateMotors();
 void sendXBeePacket(uint8_t* payload, uint8_t payload_len);
-
-// These need to be got rid of later
-float bearing_compensation;
-float speed_over_ground_compensation;
-float throttle_compensation = 0;
-float throttle_compensation_2 = 0;
 
 int main() {
 	//host.baud(115200);
@@ -88,24 +83,16 @@ int main() {
   i2c.frequency (400);
 
 	// Initialise PIDs
-  speed_over_ground_pid.setInputLimits(0.0,  Speed_In_Knots_Limit); // Assuming speed is in knots -- check this!
-  speed_over_ground_pid.setOutputLimits(0.0, 1.0);
-  speed_over_ground_pid.setMode(AUTO_MODE);
+  speedOverGroundPid.setInputLimits(0.0, SPEED_IN_KNOTS_LIMIT); // Assuming speed is in knots -- check this!
+  speedOverGroundPid.setOutputLimits(0.0, 1.0);
+  speedOverGroundPid.setMode(AUTO_MODE);
 
-  heading_pid.setInputLimits(-180,180);
-  heading_pid.setOutputLimits(0.0, 1.0);
-  heading_pid.setMode(AUTO_MODE);
+  headingPid.setInputLimits(-180,180);
+  headingPid.setOutputLimits(0.0, 1.0);
+  headingPid.setMode(AUTO_MODE);
 
-  motor_1_pid.setInputLimits(0.0,  Rpm_Limit);
-  motor_1_pid.setOutputLimits(0.0, Throttle_Limit);
-  motor_1_pid.setMode(AUTO_MODE);
-
-  motor_2_pid.setInputLimits(0.0,  Rpm_Limit);
-  motor_2_pid.setOutputLimits(0.0, Throttle_Limit);
-  motor_2_pid.setMode(AUTO_MODE);
-
-	speed_over_ground_pid.setSetPoint(2.5);
-	heading_pid.setSetPoint(0);
+	speedOverGroundPid.setSetPoint(2.5);
+	headingPid.setSetPoint(0);
 
 	DEBUG_OUTPUT(	"     _              _   _                 _   \r\n"
 								"    | |            | | | |               | |  \r\n"
@@ -130,33 +117,27 @@ int main() {
 	// Parkwood: 51.298997, 1.056683
 	// Chestfield: 51.349215, 1.066184
 	// Initialise Motors (Arming Sequence) -- If a value is not sent periodicially, then the motors WILL disarm!
-	motor_1.set(0);
-	motor_2.set(0);
+	leftMotor.set(0);
+	rightMotor.set(0);
 	wait(1);
 
 	// Initialise Scheduler
 	Ticker telemetryUpdateTkr;
-	Ticker trackUpdateTkr;
+	Ticker trackandSpeedUpdateTkr;
 	Ticker motorUpdateTkr;
   telemetryUpdateTkr.attach_us(&telemetry_update_ISR, TELEMETRY_UPDATE_RATE * 1000);
-	trackUpdateTkr.attach_us(&track_update_ISR, TRACK_UPDATE_RATE * 1000);
+	trackandSpeedUpdateTkr.attach_us(&track_and_speed_update_ISR, TRACK_UPDATE_RATE * 1000);
 	motorUpdateTkr.attach_us(&motor_update_ISR, MOTOR_UPDATE_RATE * 1000);
 
 	while(1) {
-		wait_ms(500);
-
-		// Grab new data from motors
-		motor_1.update();
-		motor_2.update();
-
-		if(updateTrack){
-			bearing_compensation = updateHeading();
-			speed_over_ground_compensation = updateSpeedOverGround();
+		if(updateTrackAndSpeed){
+			bearingCompensation = updateHeading();
+			speedOverGroundCompensation = updateSpeedOverGround();
 			// Calculate motor setpoints.
-			float max = bearing_compensation>=0.5 ? bearing_compensation : (1-bearing_compensation);
-			motor_1_pid.setSetPoint((speed_over_ground_compensation * bearing_compensation * Rpm_Limit)/max);
-			motor_2_pid.setSetPoint((speed_over_ground_compensation * (1-bearing_compensation) * Rpm_Limit)/max);
-			updateTrack = false;
+			float max = bearingCompensation>=0.5 ? bearingCompensation : (1-bearingCompensation);
+			leftThrottle = ((speedOverGroundCompensation * bearingCompensation * THROTTLE_LIMIT)/max);
+			rightThrottle = ((speedOverGroundCompensation * (1-bearingCompensation) * THROTTLE_LIMIT)/max);
+			updateTrackAndSpeed = false;
 		}
 		if(updateMotor){
 	  	updateMotors();
@@ -179,9 +160,9 @@ void telemetry_update_ISR()
     updateTelemetry = true;
 }
 
-void track_update_ISR()
+void track_and_speed_update_ISR()
 {
-    updateTrack = true;
+    updateTrackAndSpeed = true;
 }
 
 void motor_update_ISR()
@@ -190,18 +171,18 @@ void motor_update_ISR()
 }
 
 void gps_satellite_telemetry() {
-	shedBoat_Telemetry telemetry_message = shedBoat_Telemetry_init_zero;
+	shedBoat_Telemetry telemetryMessage = shedBoat_Telemetry_init_zero;
 
-	telemetry_message.status = shedBoat_Telemetry_Status_UNDEFINED;
-	telemetry_message.has_location = true;
+	telemetryMessage.status = shedBoat_Telemetry_Status_UNDEFINED;
+	telemetryMessage.has_location = true;
 
-	telemetry_message.location.has_number_of_satellites_visible = true;
-	telemetry_message.location.number_of_satellites_visible = NMEA::getSatellites();
+	telemetryMessage.location.has_number_of_satellites_visible = true;
+	telemetryMessage.location.number_of_satellites_visible = NMEA::getSatellites();
 
 #ifdef SEND_TELEMETRY
 	uint8_t buffer[100];
   pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
-	bool success = pb_encode(&stream, shedBoat_Telemetry_fields, &telemetry_message);
+	bool success = pb_encode(&stream, shedBoat_Telemetry_fields, &telemetryMessage);
 	if(success) {
 		sendXBeePacket(buffer, stream.bytes_written);
 	} else {
@@ -228,61 +209,61 @@ void send_telemetry()
 	DEBUG_OUTPUT("Heading to Parkwood %03.0f\r\n", heading_delta( heading, bearing ) );
 
 #ifdef SEND_TELEMETRY
-	shedBoat_Telemetry telemetry_message = shedBoat_Telemetry_init_zero;
+	shedBoat_Telemetry telemetryMessage = shedBoat_Telemetry_init_zero;
 
-	telemetry_message.status = shedBoat_Telemetry_Status_STATIONARY;
+	telemetryMessage.status = shedBoat_Telemetry_Status_STATIONARY;
 
-	telemetry_message.has_location = true;
-	telemetry_message.location.has_latitude = true;
-	telemetry_message.location.latitude = NMEA::getLatitude();
-	telemetry_message.location.has_longitude = true;
-	telemetry_message.location.longitude = NMEA::getLongitude();
-	telemetry_message.location.has_number_of_satellites_visible = true;
-	telemetry_message.location.number_of_satellites_visible = NMEA::getSatellites();
-	telemetry_message.location.has_true_heading = true;
-	telemetry_message.location.true_heading = heading * 1000;
-	telemetry_message.location.has_true_bearing = true;
-	telemetry_message.location.true_bearing = bearing * 1000;
-	telemetry_message.location.has_speed_over_ground = true;
-	telemetry_message.location.speed_over_ground = NMEA::getSpeed() * 1000;
-	telemetry_message.location.has_utc_seconds = true;
-	telemetry_message.location.utc_seconds = NMEA::getSecond();
+	telemetryMessage.has_location = true;
+	telemetryMessage.location.has_latitude = true;
+	telemetryMessage.location.latitude = NMEA::getLatitude();
+	telemetryMessage.location.has_longitude = true;
+	telemetryMessage.location.longitude = NMEA::getLongitude();
+	telemetryMessage.location.has_number_of_satellites_visible = true;
+	telemetryMessage.location.number_of_satellites_visible = NMEA::getSatellites();
+	telemetryMessage.location.has_true_heading = true;
+	telemetryMessage.location.true_heading = heading * 1000;
+	telemetryMessage.location.has_true_bearing = true;
+	telemetryMessage.location.true_bearing = bearing * 1000;
+	telemetryMessage.location.has_speed_over_ground = true;
+	telemetryMessage.location.speed_over_ground = NMEA::getSpeed() * 1000;
+	telemetryMessage.location.has_utc_seconds = true;
+	telemetryMessage.location.utc_seconds = NMEA::getSecond();
 
-	telemetry_message.motor_count = 2;
-	telemetry_message.motor[0].motor_number = 1;
-	telemetry_message.motor[0].has_is_alive = true;
-	telemetry_message.motor[0].is_alive = motor_1.isAlive();
-	telemetry_message.motor[0].has_rpm = true;
-	telemetry_message.motor[0].rpm = motor_1.rpm();
-	telemetry_message.motor[0].has_temperature = true;
-	telemetry_message.motor[0].temperature = motor_1.temperature();
-	telemetry_message.motor[0].has_voltage = true;
-	telemetry_message.motor[0].voltage = motor_1.voltage();
-	telemetry_message.motor[1].motor_number = 2;
-	telemetry_message.motor[1].has_is_alive = true;
-	telemetry_message.motor[1].is_alive = motor_2.isAlive();
-	telemetry_message.motor[1].has_rpm = true;
-	telemetry_message.motor[1].rpm = motor_2.rpm();
-	telemetry_message.motor[1].has_temperature = true;
-	telemetry_message.motor[1].temperature = motor_2.temperature();
-	telemetry_message.motor[1].has_voltage = true;
-	telemetry_message.motor[1].voltage = motor_2.voltage();
+	telemetryMessage.motor_count = 2;
+	telemetryMessage.motor[0].motor_number = 1;
+	telemetryMessage.motor[0].has_is_alive = true;
+	telemetryMessage.motor[0].is_alive = leftMotor.isAlive();
+	telemetryMessage.motor[0].has_rpm = true;
+	telemetryMessage.motor[0].rpm = leftMotor.rpm();
+	telemetryMessage.motor[0].has_temperature = true;
+	telemetryMessage.motor[0].temperature = leftMotor.temperature();
+	telemetryMessage.motor[0].has_voltage = true;
+	telemetryMessage.motor[0].voltage = leftMotor.voltage();
+	telemetryMessage.motor[1].motor_number = 2;
+	telemetryMessage.motor[1].has_is_alive = true;
+	telemetryMessage.motor[1].is_alive = rightMotor.isAlive();
+	telemetryMessage.motor[1].has_rpm = true;
+	telemetryMessage.motor[1].rpm = rightMotor.rpm();
+	telemetryMessage.motor[1].has_temperature = true;
+	telemetryMessage.motor[1].temperature = rightMotor.temperature();
+	telemetryMessage.motor[1].has_voltage = true;
+	telemetryMessage.motor[1].voltage = rightMotor.voltage();
 
-	telemetry_message.has_battery = false;
+	telemetryMessage.has_battery = false;
 
-	telemetry_message.has_debug = true;
-	telemetry_message.debug.has_bearing_compensation = true;
-	telemetry_message.debug.bearing_compensation = bearing_compensation * 1000;
-	telemetry_message.debug.has_speed_over_ground_compensation = true;
-	telemetry_message.debug.speed_over_ground_compensation = speed_over_ground_compensation * 1000;
-	telemetry_message.debug.has_motor_1_throttle_compensation = true;
-	telemetry_message.debug.motor_1_throttle_compensation = throttle_compensation * 1000;
-	telemetry_message.debug.has_motor_2_throttle_compensation = true;
-	telemetry_message.debug.motor_2_throttle_compensation = throttle_compensation_2 * 1000;
+	telemetryMessage.has_debug = true;
+	telemetryMessage.debug.has_bearing_compensation = true;
+	telemetryMessage.debug.bearing_compensation = bearingCompensation * 1000;
+	telemetryMessage.debug.has_speed_over_ground_compensation = true;
+	telemetryMessage.debug.speed_over_ground_compensation = speedOverGroundCompensation * 1000;
+	telemetryMessage.debug.has_motor_1_throttle_compensation = true;
+	telemetryMessage.debug.motor_1_throttle_compensation = leftThrottle * 1000;
+	telemetryMessage.debug.has_motor_2_throttle_compensation = true;
+	telemetryMessage.debug.motor_2_throttle_compensation = rightThrottle * 1000;
 
 	uint8_t buffer[100];
 	pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
-	bool success = pb_encode(&stream, shedBoat_Telemetry_fields, &telemetry_message);
+	bool success = pb_encode(&stream, shedBoat_Telemetry_fields, &telemetryMessage);
 	if(success) {
 		sendXBeePacket(buffer, stream.bytes_written);
 	} else {
@@ -293,8 +274,8 @@ void send_telemetry()
 
 float updateSpeedOverGround()
 {
-    speed_over_ground_pid.setProcessValue(NMEA::getSpeed());
-    return speed_over_ground_pid.compute();
+    speedOverGroundPid.setProcessValue(NMEA::getSpeed());
+    return speedOverGroundPid.compute();
 }
 
 float updateHeading()
@@ -302,28 +283,21 @@ float updateHeading()
 	bearing = compass.smoothedBearing();
 	heading = startHeading(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI);
 
-  heading_pid.setProcessValue(heading_delta(heading,bearing));
-  return heading_pid.compute();
+  headingPid.setProcessValue(heading_delta(heading,bearing));
+  return headingPid.compute();
 }
 
 void updateMotors()
 {
-    // If a motor is responsive, then calculate new throttle compensation and pass this to the motor. Also report back.
-  if(motor_1.isAlive()){
-      motor_1_pid.setProcessValue(motor_1.rpm());
-			throttle_compensation = motor_1_pid.compute();
-			motor_1.set((short)throttle_compensation);
+	leftMotor.update();
+	rightMotor.update();
+    // If a motor is responsive, then send current throttle amount.
+  if(leftMotor.isAlive()){
+			leftMotor.set(leftThrottle);
   }
-  if(motor_2.isAlive()){
-      motor_2_pid.setProcessValue(motor_2.rpm());
-			throttle_compensation_2 = motor_2_pid.compute();
-			motor_2.set((short)throttle_compensation_2);
+  if(rightMotor.isAlive()){
+			rightMotor.set(rightThrottle);
   }
-
-	DEBUG_OUTPUT("Motor 1 RPM: %d\t\t",motor_1.rpm());
-	DEBUG_OUTPUT("Throttle Compensation 1: %f\t\t",throttle_compensation);
-	DEBUG_OUTPUT("Motor 2 RPM: %d\t\t",motor_2.rpm());
-	DEBUG_OUTPUT("Throttle Compensation 2: %f\r\n",throttle_compensation_2);
 }
 
 void sendXBeePacket(uint8_t* payload, uint8_t payload_len) {

@@ -9,6 +9,9 @@
 #include "boat.pb.h"
 
 //#define DEBUG
+// Enabling BEARING_PID_CALIBRATION or SPEED_PID_CALIBRATION allows the motors to only be effected by one PID; useful for calibration.
+//#define BEARING_PID_CALIBRATION
+//#define SPEED_PID_CALIBRATION
 #define SEND_TELEMETRY
 
 #define LEFT_MOTOR_ESC_ADDRESS 0x2B
@@ -22,6 +25,7 @@
 
 // PID Limits
 #define THROTTLE_LIMIT 32767.0
+// Max speed ahead
 #define SPEED_IN_KNOTS_LIMIT 3.5
 
 // Test for correctness when in a room that does produce it's own magnetic field...
@@ -35,6 +39,8 @@
 #else
 	#define DEBUG_OUTPUT(...)
 #endif
+
+bool autopilot = true;
 
 Serial xbee(PTC4, PTC3);
 
@@ -74,20 +80,20 @@ void send_xbee_packet(uint8_t* payload, uint8_t payload_len);
 
 int main() {
 	//host.baud(115200);
-	xbee.baud(9600);
+	xbee.baud(115200);
 
   Ticker heartbeat_tkr;
   heartbeat_tkr.attach_us(&beat, HEARTBEAT_UPDATE_RATE * 1000);
 
-  i2c.frequency (400);
+  //i2c.frequency(400);
 
 	// Initialise PIDs
   speedOverGroundPid.setInputLimits(0.0, SPEED_IN_KNOTS_LIMIT); // Assuming speed is in knots -- check this!
-  speedOverGroundPid.setOutputLimits(0.0, 1.0);
+  speedOverGroundPid.setOutputLimits(1, THROTTLE_LIMIT);
   speedOverGroundPid.setMode(AUTO_MODE);
 
   headingPid.setInputLimits(-180,180);
-  headingPid.setOutputLimits(0.0, 1.0);
+  headingPid.setOutputLimits(0.0, THROTTLE_LIMIT);
   headingPid.setMode(AUTO_MODE);
 
 	speedOverGroundPid.setSetPoint(2.5);
@@ -129,7 +135,7 @@ int main() {
 	motorUpdateTkr.attach_us(&motor_update_ISR, MOTOR_UPDATE_RATE * 1000);
 
 	while(1) {
-		if(updateTrackAndSpeed){
+		if(updateTrackAndSpeed && (autopilot==true)){
 			update_speed_and_heading();
 			updateTrackAndSpeed = false;
 		}
@@ -144,24 +150,78 @@ int main() {
   }
 }
 
-void beat()
+void update_speed_and_heading()
 {
-    heartbeat = !heartbeat;
+		bearing = compass.smoothedBearing();
+		heading = startHeading(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI);
+		headingPid.setProcessValue(heading_delta(heading,bearing));
+		speedOverGroundPid.setProcessValue(NMEA::getSpeed());
+		#ifdef SPEED_PID_CALIBRATION
+			bearingCompensation = 0;
+		#else
+			bearingCompensation = headingPid.compute();
+		#endif
+		#ifdef BEARING_PID_CALIBRATION
+			speedOverGroundCompensation = 0;
+		#else
+			speedOverGroundCompensation = speedOverGroundPid.compute();
+		#endif
+		leftThrottle = ((speedOverGroundCompensation - bearingCompensation) < THROTTLE_LIMIT) ? (speedOverGroundCompensation - bearingCompensation) : THROTTLE_LIMIT;
+		rightThrottle = ((speedOverGroundCompensation + bearingCompensation) < THROTTLE_LIMIT) ? (speedOverGroundCompensation + bearingCompensation) : THROTTLE_LIMIT;
 }
 
-void telemetry_update_ISR()
+void update_motors()
 {
-    updateTelemetry = true;
+	leftMotor.update();
+	rightMotor.update();
+    // If a motor is responsive, then send current throttle amount.
+  if(leftMotor.isAlive()){
+			leftMotor.set(leftThrottle * -1);
+  }
+  if(rightMotor.isAlive()){
+			rightMotor.set(rightThrottle);
+  }
 }
 
-void track_and_speed_update_ISR()
-{
-    updateTrackAndSpeed = true;
-}
+void send_xbee_packet(uint8_t* payload, uint8_t payload_len) {
 
-void motor_update_ISR()
-{
-    updateMotor = true;
+	xbee.putc(0x7E); // Starting delimiter
+	xbee.putc(0x00); // Length (MSB)
+	xbee.putc((uint8_t)(payload_len + 14)); // Length (LSB)
+
+	// Frame content
+	xbee.putc(0x10); // Frame type, transmit
+	xbee.putc(0x01); // Frame ID
+
+	// Coordinator address (64 bit address)
+	xbee.putc(0x00);
+	xbee.putc(0x00);
+	xbee.putc(0x00);
+	xbee.putc(0x00);
+	xbee.putc(0x00);
+	xbee.putc(0x00);
+	xbee.putc(0xFF);
+	xbee.putc(0xFF);
+
+	// 16 bit address
+	xbee.putc(0xFF); // 16 bit 0xFFFE = unknown or broadcast
+	xbee.putc(0xFE);
+
+	// Options
+	xbee.putc(0x00);
+
+	// Broadcast Range
+	xbee.putc(0x00);
+
+	//checksum is the sum all constant bytes except start delimiter and length
+	uint8_t checksum = (uint8_t)(0x10 + 0x01 + 0xFF + 0xFF + 0xFF + 0xFE);
+
+	for(uint8_t i=0; i<payload_len; i++) {
+		checksum += payload[i];
+		xbee.putc(payload[i]);
+	}
+
+	xbee.putc(0xFF-checksum);
 }
 
 void gps_satellite_telemetry() {
@@ -266,70 +326,22 @@ void send_telemetry()
 #endif
 }
 
-void update_speed_and_heading()
+void beat()
 {
-		bearing = compass.smoothedBearing();
-		heading = startHeading(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI);
-		headingPid.setProcessValue(heading_delta(heading,bearing));
-		float bearingCompensation = headingPid.compute();
-		speedOverGroundPid.setProcessValue(NMEA::getSpeed());
-		float speedOverGroundCompensation = speedOverGroundPid.compute();
-		// Calculate motor setpoints.
-		float max = bearingCompensation>=0.5 ? bearingCompensation : (1-bearingCompensation);
-		leftThrottle = ((speedOverGroundCompensation * bearingCompensation * THROTTLE_LIMIT)/max);
-		rightThrottle = ((speedOverGroundCompensation * (1-bearingCompensation) * THROTTLE_LIMIT)/max);
+    heartbeat = !heartbeat;
 }
 
-void update_motors()
+void telemetry_update_ISR()
 {
-	leftMotor.update();
-	rightMotor.update();
-    // If a motor is responsive, then send current throttle amount.
-  if(leftMotor.isAlive()){
-			leftMotor.set(leftThrottle);
-  }
-  if(rightMotor.isAlive()){
-			rightMotor.set(rightThrottle);
-  }
+    updateTelemetry = true;
 }
 
-void send_xbee_packet(uint8_t* payload, uint8_t payload_len) {
+void track_and_speed_update_ISR()
+{
+    updateTrackAndSpeed = true;
+}
 
-	xbee.putc(0x7E); // Starting delimiter
-	xbee.putc(0x00); // Length (MSB)
-	xbee.putc((uint8_t)(payload_len + 14)); // Length (LSB)
-
-	// Frame content
-	xbee.putc(0x10); // Frame type, transmit
-	xbee.putc(0x01); // Frame ID
-
-	// Coordinator address (64 bit address)
-	xbee.putc(0x00);
-	xbee.putc(0x00);
-	xbee.putc(0x00);
-	xbee.putc(0x00);
-	xbee.putc(0x00);
-	xbee.putc(0x00);
-	xbee.putc(0xFF);
-	xbee.putc(0xFF);
-
-	// 16 bit address
-	xbee.putc(0xFF); // 16 bit 0xFFFE = unknown or broadcast
-	xbee.putc(0xFE);
-
-	// Options
-	xbee.putc(0x00);
-
-	// Broadcast Range
-	xbee.putc(0x00);
-
-	//checksum is the sum all constant bytes except start delimiter and length
-	uint8_t checksum = (uint8_t)(0x10 + 0x01 + 0xFF + 0xFF + 0xFF + 0xFE);
-
-	for(uint8_t i=0; i<payload_len; i++) {
-		checksum += payload[i];
-		xbee.putc(payload[i]);
-	}
-
-	xbee.putc(0xFF-checksum);
+void motor_update_ISR()
+{
+    updateMotor = true;
 }

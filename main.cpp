@@ -68,10 +68,9 @@ void track_and_speed_update_ISR();
 void motor_update_ISR();
 void gps_satellite_telemetry();
 void send_telemetry();
-float updateSpeedOverGround();
-float updateHeading();
-void updateMotors();
-void sendXBeePacket(uint8_t* payload, uint8_t payload_len);
+void update_speed_and_heading();
+void update_motors();
+void send_xbee_packet(uint8_t* payload, uint8_t payload_len);
 
 int main() {
 	//host.baud(115200);
@@ -131,16 +130,11 @@ int main() {
 
 	while(1) {
 		if(updateTrackAndSpeed){
-			bearingCompensation = updateHeading();
-			speedOverGroundCompensation = updateSpeedOverGround();
-			// Calculate motor setpoints.
-			float max = bearingCompensation>=0.5 ? bearingCompensation : (1-bearingCompensation);
-			leftThrottle = ((speedOverGroundCompensation * bearingCompensation * THROTTLE_LIMIT)/max);
-			rightThrottle = ((speedOverGroundCompensation * (1-bearingCompensation) * THROTTLE_LIMIT)/max);
+			update_speed_and_heading();
 			updateTrackAndSpeed = false;
 		}
 		if(updateMotor){
-	  	updateMotors();
+	  	update_motors();
 			updateMotor = false;
 		}
 		if(updateTelemetry){
@@ -184,7 +178,7 @@ void gps_satellite_telemetry() {
   pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
 	bool success = pb_encode(&stream, shedBoat_Telemetry_fields, &telemetryMessage);
 	if(success) {
-		sendXBeePacket(buffer, stream.bytes_written);
+		send_xbee_packet(buffer, stream.bytes_written);
 	} else {
 		error("Failed to encode Proto Buffer");
 	}
@@ -265,29 +259,28 @@ void send_telemetry()
 	pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
 	bool success = pb_encode(&stream, shedBoat_Telemetry_fields, &telemetryMessage);
 	if(success) {
-		sendXBeePacket(buffer, stream.bytes_written);
+		send_xbee_packet(buffer, stream.bytes_written);
 	} else {
 		error("Failed to encode Proto Buffer");
 	}
 #endif
 }
 
-float updateSpeedOverGround()
+void update_speed_and_heading()
 {
-    speedOverGroundPid.setProcessValue(NMEA::getSpeed());
-    return speedOverGroundPid.compute();
+		bearing = compass.smoothedBearing();
+		heading = startHeading(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI);
+		headingPid.setProcessValue(heading_delta(heading,bearing));
+		float bearingCompensation = headingPid.compute();
+		speedOverGroundPid.setProcessValue(NMEA::getSpeed());
+		float speedOverGroundCompensation = speedOverGroundPid.compute();
+		// Calculate motor setpoints.
+		float max = bearingCompensation>=0.5 ? bearingCompensation : (1-bearingCompensation);
+		leftThrottle = ((speedOverGroundCompensation * bearingCompensation * THROTTLE_LIMIT)/max);
+		rightThrottle = ((speedOverGroundCompensation * (1-bearingCompensation) * THROTTLE_LIMIT)/max);
 }
 
-float updateHeading()
-{
-	bearing = compass.smoothedBearing();
-	heading = startHeading(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()), degToRad(51.298997), degToRad(1.056683))*(180.0/M_PI);
-
-  headingPid.setProcessValue(heading_delta(heading,bearing));
-  return headingPid.compute();
-}
-
-void updateMotors()
+void update_motors()
 {
 	leftMotor.update();
 	rightMotor.update();
@@ -300,7 +293,7 @@ void updateMotors()
   }
 }
 
-void sendXBeePacket(uint8_t* payload, uint8_t payload_len) {
+void send_xbee_packet(uint8_t* payload, uint8_t payload_len) {
 
 	xbee.putc(0x7E); // Starting delimiter
 	xbee.putc(0x00); // Length (MSB)

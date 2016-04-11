@@ -82,32 +82,32 @@ int main() {
 	//host.baud(115200);
 	xbee.baud(115200);
 
-  Ticker heartbeat_tkr;
-  heartbeat_tkr.attach_us(&beat, HEARTBEAT_UPDATE_RATE * 1000);
+	Ticker heartbeat_tkr;
+	heartbeat_tkr.attach_us(&beat, HEARTBEAT_UPDATE_RATE * 1000);
 
-  //i2c.frequency(400);
+	//i2c.frequency(400);
 
 	// Initialise PIDs
-  speedOverGroundPid.setInputLimits(0.0, SPEED_IN_KNOTS_LIMIT); // Assuming speed is in knots -- check this!
-  speedOverGroundPid.setOutputLimits(1, THROTTLE_LIMIT);
-  speedOverGroundPid.setMode(AUTO_MODE);
+	speedOverGroundPid.setInputLimits(0.0, SPEED_IN_KNOTS_LIMIT); // Assuming speed is in knots -- check this!
+	speedOverGroundPid.setOutputLimits(1, THROTTLE_LIMIT);
+	speedOverGroundPid.setMode(AUTO_MODE);
 
-  headingPid.setInputLimits(-180,180);
-  headingPid.setOutputLimits(0.0, THROTTLE_LIMIT);
-  headingPid.setMode(AUTO_MODE);
+	headingPid.setInputLimits(-180,180);
+	headingPid.setOutputLimits(0.0, THROTTLE_LIMIT);
+	headingPid.setMode(AUTO_MODE);
 
 	speedOverGroundPid.setSetPoint(2.5);
 	headingPid.setSetPoint(0);
 
-	DEBUG_OUTPUT(	"     _              _   _                 _   \r\n"
-								"    | |            | | | |               | |  \r\n"
-								" ___| |__   ___  __| | | |__   ___   __ _| |_ \r\n"
-								"/ __| '_ \\ / _ \\/ _` | | '_ \\ / _ \\ / _` | __|\r\n"
-								"\\__ \\ | | |  __/ (_| | | |_) | (_) | (_| | |_ \r\n"
-								"|___/_| |_|\\___|\\__,_| |_.__/ \\___/ \\__,_|\\__|\r\n"
-								"                   ______                     \r\n"
-								"                  |______|\r\n"
-								"\r\n\n");
+	DEBUG_OUTPUT("     _              _   _                 _   \r\n"
+				 "    | |            | | | |               | |  \r\n"
+				 " ___| |__   ___  __| | | |__   ___   __ _| |_ \r\n"
+				 "/ __| '_ \\ / _ \\/ _` | | '_ \\ / _ \\ / _` | __|\r\n"
+				 "\\__ \\ | | |  __/ (_| | | |_) | (_) | (_| | |_ \r\n"
+				 "|___/_| |_|\\___|\\__,_| |_.__/ \\___/ \\__,_|\\__|\r\n"
+				 "                   ______                     \r\n"
+				 "                  |______|\r\n"
+				 "\r\n\n");
 
 	NMEA::init();
 
@@ -130,24 +130,24 @@ int main() {
 	Ticker telemetryUpdateTkr;
 	Ticker trackandSpeedUpdateTkr;
 	Ticker motorUpdateTkr;
-  telemetryUpdateTkr.attach_us(&telemetry_update_ISR, TELEMETRY_UPDATE_RATE * 1000);
+	telemetryUpdateTkr.attach_us(&telemetry_update_ISR, TELEMETRY_UPDATE_RATE * 1000);
 	trackandSpeedUpdateTkr.attach_us(&track_and_speed_update_ISR, TRACK_UPDATE_RATE * 1000);
 	motorUpdateTkr.attach_us(&motor_update_ISR, MOTOR_UPDATE_RATE * 1000);
 
 	while(1) {
-		if(updateTrackAndSpeed && (autopilot==true)){
+		if(updateTrackAndSpeed && autopilot){
 			update_speed_and_heading();
 			updateTrackAndSpeed = false;
 		}
 		if(updateMotor){
-	  	update_motors();
+			update_motors();
 			updateMotor = false;
 		}
 		if(updateTelemetry){
-	  	send_telemetry();
+			send_telemetry();
 			updateTelemetry = false;
 		}
-  }
+	}
 }
 
 void update_speed_and_heading()
@@ -174,17 +174,16 @@ void update_motors()
 {
 	leftMotor.update();
 	rightMotor.update();
-    // If a motor is responsive, then send current throttle amount.
-  if(leftMotor.isAlive()){
-			leftMotor.set(leftThrottle * -1);
-  }
-  if(rightMotor.isAlive()){
-			rightMotor.set(rightThrottle);
-  }
+	// If a motor is responsive, then send current throttle amount.
+	if(leftMotor.isAlive()){
+		leftMotor.set(leftThrottle * -1);
+	}
+	if(rightMotor.isAlive()){
+		rightMotor.set(rightThrottle);
+	}
 }
 
 void send_xbee_packet(uint8_t* payload, uint8_t payload_len) {
-
 	xbee.putc(0x7E); // Starting delimiter
 	xbee.putc(0x00); // Length (MSB)
 	xbee.putc((uint8_t)(payload_len + 14)); // Length (LSB)
@@ -235,7 +234,7 @@ void gps_satellite_telemetry() {
 
 #ifdef SEND_TELEMETRY
 	uint8_t buffer[100];
-  pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
+	pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
 	bool success = pb_encode(&stream, shedBoat_Telemetry_fields, &telemetryMessage);
 	if(success) {
 		send_xbee_packet(buffer, stream.bytes_written);
@@ -254,10 +253,10 @@ void send_telemetry()
 	DEBUG_OUTPUT("Altitude:   %0.2fm\r\n", NMEA::getAltitude());
 	DEBUG_OUTPUT("Speed:      %0.2fkm/h\r\n", NMEA::getSpeed());
 	DEBUG_OUTPUT("GPS Bearing (Track made good):    %0.2f degrees\r\n", NMEA::getBearing());
-  DEBUG_OUTPUT("Compass Bearing: %03.0f\r\n", bearing);
+	DEBUG_OUTPUT("Compass Bearing: %03.0f\r\n", bearing);
 	DEBUG_OUTPUT("Heading Delta to South: %03.0f\r\n", heading_delta(180.0, bearing));
 	DEBUG_OUTPUT("Distance to Parkwood %06.2fm\r\n",
-			equirectangular(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()),degToRad(51.298997), degToRad(1.056683))
+		equirectangular(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()),degToRad(51.298997), degToRad(1.056683))
 	);
 
 	DEBUG_OUTPUT("Heading to Parkwood %03.0f\r\n", heading_delta( heading, bearing ) );
@@ -328,20 +327,20 @@ void send_telemetry()
 
 void beat()
 {
-    heartbeat = !heartbeat;
+	heartbeat = !heartbeat;
 }
 
 void telemetry_update_ISR()
 {
-    updateTelemetry = true;
+	updateTelemetry = true;
 }
 
 void track_and_speed_update_ISR()
 {
-    updateTrackAndSpeed = true;
+	updateTrackAndSpeed = true;
 }
 
 void motor_update_ISR()
 {
-    updateMotor = true;
+	updateMotor = true;
 }

@@ -9,3 +9,4 @@
 *.hg/
 *.lib
 *.DS_Store/
+*.gch

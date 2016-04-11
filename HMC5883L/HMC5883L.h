@@ -113,16 +113,6 @@ public:
     static const int I2C_ADDRESS = 0x3D;
 
     /**
-     * Constructor.
-     *
-     * Calls init function
-     *
-     * @param sda - mbed pin to use for the SDA I2C line.
-     * @param scl - mbed pin to use for the SCL I2C line.
-     */
-    HMC5883L(PinName sda, PinName scl);
-
-    /**
     * Constructor that accepts external i2c interface object.
     *
     * Calls init function
@@ -133,7 +123,7 @@ public:
         init();
     }
 
-    ~HMC5883L();
+    ~HMC5883L() {}
 
     /**
     * Initalize function called by all constructors.
@@ -256,10 +246,6 @@ private:
 
     I2C &i2c_;
 
-    /**
-     * The raw buffer for allocating I2C object in its own without heap memory.
-     */
-    char i2cRaw[sizeof(I2C)];
 };
 
 #endif // HMC5883L

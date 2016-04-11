@@ -32,21 +32,6 @@
 #include "HMC5883L.h"
 #include <new>
 
-HMC5883L::HMC5883L(PinName sda, PinName scl) : i2c_(*reinterpret_cast<I2C*>(i2cRaw))
-{
-    // Placement new to avoid additional heap memory allocation.
-    new(i2cRaw) I2C(sda, scl);
-
-    init();
-}
-
-HMC5883L::~HMC5883L()
-{
-    // If the I2C object is initialized in the buffer in this object, call destructor of it.
-    if(&i2c_ == reinterpret_cast<I2C*>(&i2cRaw))
-        reinterpret_cast<I2C*>(&i2cRaw)->~I2C();
-}
-
 void HMC5883L::init()
 {
     // init - configure your setup here

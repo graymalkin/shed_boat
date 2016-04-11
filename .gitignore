@@ -8,3 +8,4 @@
 *.hgignore
 *.hg/
 *.lib
+*.DS_Store/

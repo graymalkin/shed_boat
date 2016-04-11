@@ -120,8 +120,8 @@ double HMC5883L::getHeadingXY()
 	int16_t raw_data[3];
 	getXYZ(raw_data);
 	//The  HMC5883L gives X Z Y order
-	double heading = atan2(static_cast<double>(raw_data[2]), static_cast<double>(raw_data[0])); // heading = arctan(Y/X)
-
+	// double heading = atan2(static_cast<double>(raw_data[2]), static_cast<double>(raw_data[0])); // heading = arctan(Y/X)
+	double heading = atan2(static_cast<double>(raw_data[0]) + 215.82 ,static_cast<double>(raw_data[2]) + 86.60) - 1.64;
 
 	heading += DECLINATION_ANGLE;
 

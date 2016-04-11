@@ -30,7 +30,7 @@
 
 // Test for correctness when in a room that does produce it's own magnetic field...
 // Magnetic Declination for Canterbury = WEST 0deg 16min
-#define DECLINATION_ANGLE ((-16.0*M_PI)/(60.0*180.0))
+// #define DECLINATION_ANGLE ((-16.0*M_PI)/(60.0*180.0))
 #include "HMC5883L.h"
 
 #ifdef DEBUG
@@ -114,10 +114,10 @@ int main() {
 	compass.init();
 
 	// Wait for a valid GPS fix
-	while(NMEA::getSatellites() < 3) {
-		wait_ms(5000);
-		gps_satellite_telemetry();
-	}
+	// while(NMEA::getSatellites() < 3) {
+	// 	wait_ms(5000);
+	// 	gps_satellite_telemetry();
+	// }
 
 	// Parkwood: 51.298997, 1.056683
 	// Chestfield: 51.349215, 1.066184

@@ -77,6 +77,7 @@ void send_telemetry();
 void update_speed_and_heading();
 void update_motors();
 void send_xbee_packet(uint8_t* payload, uint8_t payload_len);
+void setup_waypoints();
 
 int main() {
 	//host.baud(115200);
@@ -255,8 +256,8 @@ void send_telemetry()
 	DEBUG_OUTPUT("GPS Bearing (Track made good):    %0.2f degrees\r\n", NMEA::getBearing());
 	DEBUG_OUTPUT("Compass Bearing: %03.0f\r\n", bearing);
 	DEBUG_OUTPUT("Heading Delta to South: %03.0f\r\n", heading_delta(180.0, bearing));
-	DEBUG_OUTPUT("Distance to Parkwood %06.2fm\r\n",
-		equirectangular(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()),degToRad(51.298997), degToRad(1.056683))
+	DEBUG_OUTPUT("Distance to Next Nav %06.2fm\r\n",
+				 distance_to_current_nav(degToRad(NMEA::getLatitude()), degToRad(NMEA::getLongitude()))
 	);
 
 	DEBUG_OUTPUT("Heading to Parkwood %03.0f\r\n", heading_delta( heading, bearing ) );
@@ -323,6 +324,17 @@ void send_telemetry()
 		error("Failed to encode Proto Buffer");
 	}
 #endif
+}
+
+void setup_waypoints()
+{
+	add_waypoint(degToRad(51.298349), degToRad(1.069928));
+	add_waypoint(degToRad(51.297772), degToRad(1.070301));
+	add_waypoint(degToRad(51.297048), degToRad(1.069866));
+	add_waypoint(degToRad(51.296581), degToRad(1.068332));
+	add_waypoint(degToRad(51.2974), degToRad(1.067618));
+	add_waypoint(degToRad(51.29795), degToRad(1.068573));
+	add_waypoint(degToRad(51.298356), degToRad(1.069871));
 }
 
 void beat()

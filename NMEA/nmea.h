@@ -31,11 +31,20 @@
 
 #include "mbed.h"
 
+typedef enum gps_quality_t {
+	IDEAL,
+	EXCELLENT,
+	GODO,
+	MODERATE,
+	FAIR,
+	POOR
+} gps_quality_t;
+
 class NMEA {
 public:
 		static bool			m_bFlagRead;					// flag used by the parser, when a valid sentence has begun
 		static bool			m_bFlagDataReady;				// valid GPS fix and data available, user can call reader functions
-		static char			tmp_words[20][80];				//	hold parsed words for one given NMEA sentence
+		static char			tmp_words[50][80];				//	hold parsed words for one given NMEA sentence
 		static char			tmp_szChecksum[15];				//	hold the received checksum for one given NMEA sentence
 
 		// will be set to true for characters between $ and * only
@@ -59,6 +68,7 @@ public:
 		static unsigned char 	res_nUTCMonth;
 		static unsigned char 	res_nUTCYear;	// GPRMC
 		static int				res_nSatellitesUsed;			// GPGGA
+		static float			res_fQuality;					// GPGGA
 		static float			res_fAltitude;					// GPGGA
 		static float			res_fSpeed;						// GPRMC
 		static float			res_fBearing;					// GPRMC
@@ -79,10 +89,10 @@ public:
 		* This function in turn, splits the sentences and interprets the data. Here is part of the parser function,
 		* handling both the $GPRMC NMEA sentence:
 		*/
+
 		static void			fusedata();
 
 		static void init();
-
 
 		// READER functions: retrieving results, call isDataReady() first
 		static bool				isDataReady();
@@ -98,5 +108,6 @@ public:
 		static float			getAltitude();
 		static float			getSpeed();
 		static float			getBearing();
+		static gps_quality_t 	getFixQuality();
 	};
 #endif // __nmea_h_

@@ -84,7 +84,7 @@
 #define RAD_TO_DEG  (180.0/M_PI)
 #define DEG_TO_RAD  (M_PI/180.0)
 
-#define SMOOTHING 0.1
+#define SMOOTHING 0.75
 
 
 // Once you have your heading, you must then add your 'Declination Angle',

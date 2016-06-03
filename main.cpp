@@ -128,12 +128,6 @@ int main() {
 
 	compass.init();
 
-	// Wait for a valid GPS fix
-	while(NMEA::getFixQuality() > 3) {
-		wait_ms(5000);
-		gps_satellite_telemetry();
-	}
-
 	// Parkwood: 51.298997, 1.056683
 	// Chestfield: 51.349215, 1.066184
 	// Initialise Motors (Arming Sequence) -- If a value is not sent periodicially, then the motors WILL disarm!

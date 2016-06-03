@@ -45,12 +45,13 @@
 
 #define WAYPOINT_RADIUS 12.0
 
-bool autopilot = true;
-
 BufferedSerial  xbee(PTC4, PTC3);
+InterruptIn autopilotRemote(A0);
+Timeout apDetect;
 
 I2C i2c(D14, D15);
 DigitalOut heartbeat(LED_GREEN);
+DigitalOut autopilotStatus(LED_BLUE);
 HMC5883L compass(i2c);
 
 SimonK_I2C_ESC leftMotor(i2c, LEFT_MOTOR_ESC_ADDRESS,6);
@@ -69,6 +70,7 @@ volatile bool updateDebugTelemetry = true;
 
 volatile bool updateTrackAndSpeed = true;
 volatile bool updateMotor = true;
+volatile bool autopilotEngaged = false;
 
 double bearing = 0.0;
 float heading = 0.0f;
@@ -82,6 +84,7 @@ void system_telemetry_update_ISR();
 void debug_telemetry_update_ISR();
 void track_and_speed_update_ISR();
 void motor_update_ISR();
+void autopilot_ISR();
 void gps_satellite_telemetry();
 void send_system_telemetry();
 void send_debug_telemetry();
@@ -96,7 +99,7 @@ int main() {
 
 	Ticker heartbeat_tkr;
 	heartbeat_tkr.attach_us(&beat, HEARTBEAT_UPDATE_RATE * 1000);
-
+	autopilotRemote.rise(&autopilot_ISR);
 	//i2c.frequency(400);
 
 	// Initialise PIDs
@@ -154,11 +157,11 @@ int main() {
 	motorUpdateTkr.attach_us(&motor_update_ISR, MOTOR_UPDATE_RATE * 1000);
 
 	while(1) {
-		if(updateTrackAndSpeed && autopilot){
+		if(updateTrackAndSpeed && autopilotEngaged){
 			update_speed_and_heading();
 			updateTrackAndSpeed = false;
 		}
-		if(updateMotor){
+		if(updateMotor && autopilotEngaged){
 			update_motors();
 			updateMotor = false;
 		}
@@ -271,7 +274,13 @@ void gps_satellite_telemetry() {
 	);
 #ifdef SEND_TELEMETRY
 	shedBoat_Telemetry telemetryMessage = shedBoat_Telemetry_init_zero;
-	telemetryMessage.status = shedBoat_Telemetry_Status_UNDEFINED;
+	if(autopilotEngaged) {
+		telemetryMessage.status = shedBoat_Telemetry_Status_UNDERWAY_AUTOPILOT;
+	}
+	else {
+		telemetryMessage.status = shedBoat_Telemetry_Status_UNDERWAY_MANUAL;
+	}
+
 	telemetryMessage.has_location = true;
 
 	telemetryMessage.location.has_latitude = true;
@@ -413,4 +422,15 @@ void track_and_speed_update_ISR()
 void motor_update_ISR()
 {
 	updateMotor = true;
+}
+
+void autopilot_detect()
+{
+	autopilotEngaged = autopilotRemote;
+	autopilotStatus = autopilotEngaged;
+}
+
+void autopilot_ISR()
+{
+	apDetect.attach_us(&autopilot_detect, 1500);
 }

@@ -33,7 +33,7 @@
 #include "mbed.h"
 #include "nmea.h"
 Serial uart1(D1, D0);
-DigitalOut rxtx_led(LED_BLUE);
+//DigitalOut rxtx_led(LED_BLUE);
 // extern Serial serial_output;
 
 bool			NMEA::m_bFlagRead;						// flag used by the parser, when a valid sentence has begun
@@ -72,7 +72,7 @@ float			NMEA::res_fBearing;					// GPRMC
 
 void NMEA::init()
 {
-	rxtx_led = 1;	// Turn the rx tx light off
+//	rxtx_led = 1;	// Turn the rx tx light off
 	m_bFlagRead = false; //are we in a sentence?
 	m_bFlagDataReady = false; //is data available?
 	res_fQuality = 2000.0;
@@ -93,7 +93,7 @@ void NMEA::fusedata() {
 	char c = uart1.getc();
 
 	if (c == '$') {
-		rxtx_led = 0;
+//		rxtx_led = 0;
 		m_bFlagRead = true;
 		// init parser vars
 		m_bFlagComputedCks = false;
@@ -139,7 +139,7 @@ void NMEA::fusedata() {
 			else m_nNowIdx++;
 		}
 	}
-	rxtx_led = 1;
+//	rxtx_led = 1;
 	// return m_nWordIdx;
 }
 

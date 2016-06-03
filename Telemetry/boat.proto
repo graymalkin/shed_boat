@@ -18,6 +18,14 @@ message Telemetry {
 }
 
 message Location{
+  enum Quality {
+	IDEAL = 0;
+	EXCELLENT = 1;
+	GOOD = 2;
+	MODERATE = 3;
+	FAIR = 4;
+	SHIT = 5;
+  }
   optional float latitude = 1;
   optional float longitude = 2;
   optional int32 number_of_satellites_visible = 3;
@@ -25,6 +33,9 @@ message Location{
   optional int32 true_heading = 5;
   optional int32 true_bearing = 6;
   optional int32 utc_seconds = 7;
+  required Quality fix_quality = 8 [default = SHIT]; 
+  optional int32 distance_to_waypoint = 9;
+  optional int32 waypoint_number = 10;
 }
 
 message Motor {

@@ -32,14 +32,13 @@
 
 #include "mbed.h"
 #include "nmea.h"
-
 Serial uart1(D1, D0);
-DigitalOut rxtx_led(LED_BLUE);
+//DigitalOut rxtx_led(LED_BLUE);
 // extern Serial serial_output;
 
 bool			NMEA::m_bFlagRead;						// flag used by the parser, when a valid sentence has begun
 bool			NMEA::m_bFlagDataReady;					// valid GPS fix and data available, user can call reader functions
-char			NMEA::tmp_words[20][80];				//	hold parsed words for one given NMEA sentence
+char			NMEA::tmp_words[50][80];				//	hold parsed words for one given NMEA sentence
 char			NMEA::tmp_szChecksum[15];				//	hold the received checksum for one given NMEA sentence
 
 // will be set to true for characters between $ and * only
@@ -63,17 +62,20 @@ unsigned char	NMEA::res_nUTCDay;
 unsigned char 	NMEA::res_nUTCMonth;
 unsigned char 	NMEA::res_nUTCYear;	// GPRMC
 int				NMEA::res_nSatellitesUsed;			// GPGGA
+float			NMEA::res_fQuality;					// GPGGA
 float			NMEA::res_fAltitude;					// GPGGA
 float			NMEA::res_fSpeed;						// GPRMC
 float			NMEA::res_fBearing;					// GPRMC
 
 
 
+
 void NMEA::init()
 {
-	rxtx_led = 1;	// Turn the rx tx light off
+//	rxtx_led = 1;	// Turn the rx tx light off
 	m_bFlagRead = false; //are we in a sentence?
 	m_bFlagDataReady = false; //is data available?
+	res_fQuality = 2000.0;
 	uart1.attach(fusedata);
 }
 
@@ -89,10 +91,9 @@ void NMEA::init()
 void NMEA::fusedata() {
 
 	char c = uart1.getc();
-	rxtx_led = 0;
-	// serial_output.putc(c);
 
 	if (c == '$') {
+//		rxtx_led = 0;
 		m_bFlagRead = true;
 		// init parser vars
 		m_bFlagComputedCks = false;
@@ -138,7 +139,7 @@ void NMEA::fusedata() {
 			else m_nNowIdx++;
 		}
 	}
-	rxtx_led = 1;
+//	rxtx_led = 1;
 	// return m_nWordIdx;
 }
 
@@ -209,6 +210,7 @@ void NMEA::parsedata() {
 
 		// parse number of satellites
 		res_nSatellitesUsed = (int)string2float(tmp_words[7]);
+		res_fQuality = string2float(tmp_words[8]);
 
 		// parse altitude
 		res_fAltitude = string2float(tmp_words[9]);
@@ -404,4 +406,18 @@ float NMEA::getSpeed() {
 
 float NMEA::getBearing() {
 	return res_fBearing;
+}
+
+gps_quality_t NMEA::getFixQuality() {
+	if (res_fQuality < 1.0)
+		return IDEAL;
+	if (res_fQuality < 2.0)
+		return EXCELLENT;
+	if (res_fQuality < 5.0)
+		return GODO;
+	if (res_fQuality < 10.0)
+		return MODERATE;
+	if (res_fQuality < 20.0)
+		return FAIR;
+	return POOR;
 }

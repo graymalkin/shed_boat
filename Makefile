@@ -3,7 +3,7 @@
 
 GCC_BIN =
 PROJECT = shed_boat
-OBJECTS = ./main.o ./NMEA/nmea.o ./NavHelper/NavHelper.o ./HMC5883L/HMC5883L.o \
+OBJECTS = ./main.o ./BufferedSerial/BufferedSerial.o ./BufferedSerial/Buffer/MyBuffer.o ./NMEA/nmea.o ./NavHelper/NavHelper.o ./HMC5883L/HMC5883L.o \
 		  ./Nanopb/pb_common.o ./Nanopb/pb_encode.o \
 		  ./PID/PID.o \
 		  ./SimonK_I2C_ESC/SimonK_I2C_ESC.o \
@@ -16,7 +16,9 @@ INCLUDE_PATHS = -I. -I./mbed -I./mbed/TARGET_K64F -I./mbed/TARGET_K64F/TARGET_Fr
 				-I./PID/ \
 				-I./SimonK_I2C_ESC/ \
 				-I./Telemetry/ \
-				-I./NavHelper
+				-I./NavHelper/ \
+				-I./BufferedSerial/Buffer/ \
+				-I./BufferedSerial/
 LIBRARY_PATHS = -L./mbed/TARGET_K64F/TOOLCHAIN_GCC_ARM
 LIBRARIES = -lmbed
 LINKER_SCRIPT = ./mbed/TARGET_K64F/TOOLCHAIN_GCC_ARM/K64FN1M0xxx12.ld

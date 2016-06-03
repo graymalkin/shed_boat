@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta content="text/html; charset=utf-8" http-equiv="Content-Type" />
+    <title>Kent Open Data Sugested Locations</title>
+
+    <!-- Leaflet.js includes -->
+    <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css" />
+    <script src="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>
+    <script src="./leaflet-providers.js"></script>
+    <script src="Leaflet.MakiMarkers.js"></script>
+
+    <link rel="stylesheet" href="./main.css" />
+</head>
+<body>
+    <div id="map"></div>
+
+    <script>
+        var map = L.map('map').setView([51.2785387,1.0488315], 14);
+        // var defaultLayer = L.tileLayer.provider('OpenStreetMap').addTo(map);
+		var Hydda_Base = L.tileLayer('http://{s}.tile.openstreetmap.se/hydda/base/{z}/{x}/{y}.png', {
+			attribution: 'Tiles courtesy of <a href="http://openstreetmap.se/" target="_blank">OpenStreetMap Sweden</a> &mdash; Map data &copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+		}).addTo(map);
+		// https: also suppported.
+		var Stamen_TonerHybrid = L.tileLayer('http://stamen-tiles-{s}.a.ssl.fastly.net/toner-hybrid/{z}/{x}/{y}.{ext}', {
+			attribution: 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; Map data &copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+			subdomains: 'abcd',
+			minZoom: 0,
+			maxZoom: 20,
+			ext: 'png'
+		}).addTo(map);
+        map.zoomControl.removeFrom(map);
+
+        var sensor = L.MakiMarkers.icon({
+            icon: "camera",
+            color: "#333",
+            size: "l"
+        });
+
+        var lock = L.MakiMarkers.icon({
+            icon: "dam",
+            color: "#333",
+            size: "l"
+        });
+
+        var aggrigator = L.MakiMarkers.icon({
+            icon: "oil-well",
+            color: "#333",
+            size: "l"
+        });
+
+		L.marker([51.298349, 1.069928], {icon: lock}).addTo(map).bindPopup('lock');
+		L.marker([51.297772, 1.070301], {icon: lock}).addTo(map).bindPopup('lock');
+		L.marker([51.297048, 1.069866], {icon: lock}).addTo(map).bindPopup('lock');
+		L.marker([51.296581, 1.068332], {icon: lock}).addTo(map).bindPopup('lock');
+		L.marker([51.2974, 1.067618], {icon: lock}).addTo(map).bindPopup('lock');
+		L.marker([51.29795, 1.068573], {icon: lock}).addTo(map).bindPopup('lock');
+		L.marker([51.298356, 1.069871], {icon: lock}).addTo(map).bindPopup('lock');
+
+    </script>
+</body>
+</html>

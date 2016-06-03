@@ -1,9 +1,12 @@
 #include "NavHelper.h"
 
+#include <stdlib.h>
 #include <math.h>
 
-nav_list_t * nav_list = NULL;
-nav_list_t * current_nav = NULL;
+#define MAX_NAV_POINTS 20
+nav_list_t nav_list[MAX_NAV_POINTS];
+unsigned int current_nav = 0;
+unsigned int nav_tail = 0;
 
 double degToRad(double deg) {
 	return deg*M_PI/180.0;
@@ -36,30 +39,22 @@ double heading_delta(double a, double b)
 	return raw_d;
 }
 
-void add_waypoint(nav_list_t * new_nav)
+void add_waypoint(double latitude, double longitude)
 {
-	if(nav_list == NULL) {
-		nav_list = new_nav;
-		current_nav = new_nav;
-		return;
-	}
-
-	nav_list_t * cur = nav_list;
-	while(cur->next != NULL) {
-		cur = cur->next;
-	}
-	cur->next = new_nav;
+	nav_list[nav_tail].latitude = latitude;
+	nav_list[nav_tail].longitude = longitude;
+	nav_tail++;
 }
 
 nav_list_t * get_current_nav()
 {
-	return current_nav;
+	return &nav_list[current_nav];
 }
 
 int go_next_nav()
 {
-	if(current_nav->next != NULL) {
-		current_nav = current_nav->next;
+	if(current_nav < (MAX_NAV_POINTS-1)) {
+		current_nav++;
 		return SUCCESS;
 	}
 	return FAILURE;
@@ -67,6 +62,10 @@ int go_next_nav()
 
 double distance_to_current_nav(double latitude, double longitude)
 {
-	return equirectangular(latitude, longitude,
-		current_nav->latitude, current_nav->longitude);
+	return equirectangular(latitude, longitude,	nav_list[current_nav].latitude, nav_list[current_nav].longitude);
+}
+
+unsigned int get_nav_num()
+{
+	return current_nav;
 }

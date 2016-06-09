@@ -422,6 +422,11 @@ void autopilot_detect()
 {
 	autopilotEngaged = autopilotRemote;
 	autopilotStatus = autopilotEngaged;
+	if(autopilotEngaged)
+	{
+		leftMotor.set(0);
+		rightMotor.set(0);
+	}
 }
 
 void autopilot_ISR()

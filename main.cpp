@@ -27,7 +27,7 @@
 #define HEARTBEAT_UPDATE_RATE 500
 
 // PID Limits
-#define THROTTLE_LIMIT 32767.0
+#define THROTTLE_LIMIT 4000.0
 // Max speed ahead
 #define SPEED_IN_KNOTS_LIMIT 3.5
 
